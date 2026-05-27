@@ -63,10 +63,11 @@ const parseFollowerCount = (value) => {
 };
 
 /**
- * Match Amplify creators: users with both TikTok and Instagram follower counts,
- * combined count within range, state match, and at least one matching platform.
+ * Match Amplify creators: at least one valid follower count from a requested
+ * platform, combined count within range, state match, and platform presence.
  *
- * Ported from server/utils/influencer.js:15-72.
+ * Ported from server/utils/influencer.js:15-72 with relaxed platform requirement —
+ * creators may have only one platform linked.
  */
 const matchBatchAmplify = (users, data) => {
   const matched = [];
@@ -77,8 +78,8 @@ const matchBatchAmplify = (users, data) => {
     const instagramFollowerCount = user?.creator_socials?.instagram?.follower_count;
     const tiktokFollowerCount = user?.creator_socials?.tiktok?.performance?.followerCount;
 
-    // Both follower counts must exist (not undefined)
-    if (tiktokFollowerCount === undefined || instagramFollowerCount === undefined) {
+    // At least one follower count must exist
+    if (tiktokFollowerCount === undefined && instagramFollowerCount === undefined) {
       return;
     }
 
@@ -86,7 +87,7 @@ const matchBatchAmplify = (users, data) => {
     const parsedInstagram = parseFollowerCount(instagramFollowerCount);
     const followerCount = (parsedTiktok || 0) + (parsedInstagram || 0);
 
-    if (isNaN(followerCount)) return;
+    if (isNaN(followerCount) || followerCount === 0) return;
 
     // State match: "USA" matches all users; otherwise must match exactly
     const influencerState = user?.shipping_details?.state;
