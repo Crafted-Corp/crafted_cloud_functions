@@ -1,0 +1,123 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invitation to {{campaign_name}}</title>
+    <style>
+      /* Reset some default styles */
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+      }
+
+      /* Set a background color */
+      body {
+        background-color: #f5f5f5;
+      }
+
+      /* Main email container */
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #ffffff;
+        border-radius: 6px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Header */
+      .header {
+        text-align: center;
+        padding: 20px 0;
+      }
+
+      .header h1 {
+        margin: 0;
+        color: #333333;
+      }
+
+      /* Content */
+      .content {
+        padding: 20px 0;
+      }
+
+      .content p {
+        margin: 0;
+      }
+
+      /* Call-to-action button */
+      .cta-button {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 10px 20px;
+        background-color: #ff2440;
+        color: #ffffff;
+        text-decoration: none;
+        border-radius: 4px;
+      }
+
+      .cta-button:hover {
+        background-color: #0056b3;
+      }
+
+      /* Footer */
+      .footer {
+        text-align: center;
+        padding: 20px 0;
+        font-size: 14px;
+        color: #888888;
+      }
+      .image{
+        height: 75px;
+        width: auto;
+      }
+      .bold-text {
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <img
+        src="https://uploads-ssl.webflow.com/5f58fccfa158267296fc4d69/63f4b6b27336d3da48b61c93_crafted%20logos%20(Video)-p-500.png"
+        alt="Description of the image" width="200" height="150"
+        class="image"
+      >
+        <div class="content" style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <p>Hi, <strong>{{name}}</strong>,</p>
+          <br>
+          <p><strong>{{brand_name}}</strong> believes that your social media presence could be a great asset to their Studio brief <strong>{{task_name}}</strong>!</p>
+          <br>
+
+          <p style="font-weight: bold;">Here are the details on the brief:</p>
+          <ul style="line-height: 2;">
+            <li>Brief Name: <strong>{{task_name}}</strong></li>
+            <li>Compensation: <strong>${{price}}</strong></li>
+            <li>Product: <strong>{{note1}}</strong></li>
+            <li>Target Audience: <strong>{{note2}}</strong></li>
+            {{#if note3}}<li>Additional Information: <strong>{{note3}}</strong></li>{{/if}}
+            {{#if brief_link}}<li>Brief Link: <strong>{{brief_link}}</strong></li>{{/if}}
+          </ul>
+          <p  style="text-align: center; margin: 20px 0;">You can click below to review the brief {{task_name}} under the "Apply to Briefs" tab and apply if you're interested.</p>
+          <div style="text-align: center; margin: 20px 0;">
+            <a href="https://www.app.cookwithcrafted.com/creator/dashboard/tasks" style="background-color: #fe2643; color: white; border-radius: 10px; padding: 15px 30px; text-decoration: none; display: inline-block; font-size: 18px;">Apply for Briefs</a>
+          </div>
+          <p>Best,</p>
+          <p>The Crafted Team</p>
+          <div class="footer" style="margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px;">
+            <p>Crafted Inc. | New York, NY</p>
+            <p>Website: <a href="https://www.cookwithcrafted.com/" target="_blank">www.cookwithcrafted.com </a></p>
+            <p>Follow us:
+              <a href="https://www.facebook.com/cookwithcrafted" target="_blank">Facebook</a> |
+              <a href="https://twitter.com/cookwithcrafted?lang=en" target="_blank">Twitter</a> |
+              <a href="https://www.instagram.com/cookwithcrafted/?hl=en" target="_blank">Instagram</a> |
+              <a href="https://twitter.com/cookwithcrafted?lang=en" target="_blank">TikTok</a>
+            </p>
+            <p>If you have any questions, feel free to contact us at team@usecrafted.com.</p>
+          </div>
+        </div>
+  </body>
+</html>
