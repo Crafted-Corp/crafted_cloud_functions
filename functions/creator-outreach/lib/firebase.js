@@ -2,7 +2,7 @@ const admin = require("firebase-admin");
 const path = require("path");
 
 const envConfigs = {
-  development: {
+  dev: {
     databaseURL: "https://crafted-dev-v1-default-rtdb.firebaseio.com",
     keyFile: "config/devServiceAccountKey.json",
   },
@@ -10,13 +10,13 @@ const envConfigs = {
     databaseURL: "https://crafted-staging-v1-default-rtdb.firebaseio.com",
     keyFile: "config/stagingServiceAccountKey.json",
   },
-  production: {
+  prod: {
     databaseURL: "https://crafted-v1.firebaseio.com",
     keyFile: "config/serviceAccountKey.json",
   },
 };
 
-const env = process.env.NODE_ENV || "development";
+const env = process.env.NODE_ENV || "dev";
 const config = envConfigs[env];
 
 if (!config) {

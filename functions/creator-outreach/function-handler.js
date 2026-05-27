@@ -4,7 +4,7 @@ const firebase = require("./lib/firebase");
 const Sentry = require("./lib/sentry");
 const { outreachRequestSchema } = require("./lib/schemas");
 const { scanCreators } = require("./lib/scanner");
-const { sendOutreachEmails } = require("./lib/emailService");
+const { sendOutreachEmails } = require("./lib/email");
 
 /**
  * Store blast results in Firebase at the correct path per product.
