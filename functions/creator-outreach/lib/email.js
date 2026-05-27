@@ -1,10 +1,7 @@
 /**
  * Email service — brand data fetch, Handlebars rendering, SendGrid bulk send.
  *
- * Key improvement over the old studioOutreach/email.js: brand data is fetched
- * ONCE per request via fetchBrandData(), not per-creator. For 100 creators this
- * reduces Firebase reads from 700 to 2.
- *
+ * Brand data is fetched ONCE per request via fetchBrandData(), not per-creator.
  * Templates are compiled at module load (cold start), not per-request.
  */
 
@@ -65,10 +62,6 @@ const extractResults = (result, personalizationCount) => {
 
 /**
  * Send Studio brief invite emails.
- *
- * Ported from studioOutreach/email.js and server/services/emailService.js:175-237.
- * Fixes: brand data fetched once (not per-creator), Handlebars instead of regex,
- * bulk SendGrid send instead of one-by-one transporter.sendMail().
  */
 const sendStudioEmails = async (firebase, data, creators) => {
   const brand = await fetchBrandData(firebase, data.brand_id);
@@ -108,10 +101,6 @@ const sendStudioEmails = async (firebase, data, creators) => {
 
 /**
  * Send Amplify campaign invite emails.
- *
- * Ported from server/services/emailService.js:116-173.
- * Rate formula: parseInt((tiktokSuggestedRate || 0) / 100 + (instagramSuggestedRate || 0) / 100)
- *   + prices.creator_amplify_video_price / 100
  */
 const sendAmplifyEmails = async (firebase, data, creators) => {
   const brand = await fetchBrandData(firebase, data.brand_id);

@@ -14,7 +14,6 @@ const BATCH_SIZE = 100;
  * Match Studio creators: users who have opted into creator_tasks and whose
  * shipping state or country matches the task's regions.
  *
- * Ported from studioOutreach/task.js:41-68.
  */
 const matchBatchStudio = (users, taskRegions) => {
   const matched = [];
@@ -53,7 +52,6 @@ const matchBatchStudio = (users, taskRegions) => {
  * Parse a follower count that may be a number or a comma-separated string
  * (e.g., "12,345" -> 12345).
  *
- * Ported from server/utils/influencer.js:33-40.
  */
 const parseFollowerCount = (value) => {
   if (typeof value === "string") {
@@ -66,8 +64,6 @@ const parseFollowerCount = (value) => {
  * Match Amplify creators: at least one valid follower count from a requested
  * platform, combined count within range, state match, and platform presence.
  *
- * Ported from server/utils/influencer.js:15-72 with relaxed platform requirement —
- * creators may have only one platform linked.
  */
 const matchBatchAmplify = (users, data) => {
   const matched = [];

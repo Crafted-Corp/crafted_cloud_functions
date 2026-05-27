@@ -9,8 +9,8 @@ const { sendOutreachEmails } = require("./lib/email");
 /**
  * Store blast results in Firebase at the correct path per product.
  *
- * Studio: tasks/{task.uid}/invites — single .set() (matches studioOutreach/task.js:106-116)
- * Amplify: atomic multi-path update to two paths (matches campaignService.js:1246)
+ * Studio: tasks/{task.uid}/invites
+ * Amplify: atomic multi-path update to two paths
  */
 const storeResults = async (firebase, data, blastResults) => {
   if (data.product === "studio") {
