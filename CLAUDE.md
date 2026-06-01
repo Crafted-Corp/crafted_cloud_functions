@@ -1,85 +1,83 @@
-# CLAUDE.md — crafted_cloud_functions/
+# CLAUDE.md — Cloud Functions Code Patterns & Conventions
+
+This file defines the patterns and anti-patterns for the Crafted Cloud Functions (Google Cloud Functions Framework).
+Read this before making any changes.
 
 ---
 
-## 1. Business purpose
+## Branch Flow
+```
+dev → main
+```
 
-Google Cloud Functions (GCF) for Firebase-backed background processing and integrations. These functions handle:
-- Instagram analytics data collection and refresh
-- TikTok rate and analytics refresh
-- Campaign analytics refresh
-- Creator social data updates
-- Firebase data loading utilities
-- Studio and Amplify asset/draft management
-- Campaign outreach email sending
-
-These are internal backend functions — not directly user-facing. They support the Crafted Amplify/Studio platform (brand and creator side).
+## Runtime
+- Google Cloud Functions Framework (`@google-cloud/functions-framework`)
+- Node.js, Firebase Realtime Database, REST APIs (TikTok, Instagram Graph API)
+- Deployed as individual HTTP-triggered functions
 
 ---
 
-## 2. Technical role
-
-Serverless **Google Cloud Functions** (HTTP trigger or Firebase callable) deployed from this directory. Each function is independently deployable. Functions communicate with **Firebase Firestore/Realtime Database** and external social APIs (Instagram, TikTok).
-
-This is a **separate git repository root** (has its own `.git/`). It is a legacy system — part of the original Crafted platform alongside `api/` and `crafted-react-app/`.
-
----
-
-## 3. Important files and subfolders
+## Repository Structure
 
 ```
 functions/
-├── getBalancedUsers/               ← Retrieves users with balances
-├── loadUsers/                      ← Loads/reformats user data
-├── processInstagramComments/       ← Processes Instagram post comments
-├── refreshAllCampaignAnalytics/    ← Refreshes TikTok + Instagram campaign analytics
-├── refreshInstagramRates/          ← Updates Instagram suggested rates for creators
-├── refreshTikTokRates/             ← Updates TikTok suggested rates
-├── refreshTokens/                  ← Refreshes social API auth tokens
-├── studioOutreach/                 ← Sends campaign brief emails to creators
-├── updateInstagramDemographics/    ← Updates Instagram demographic data
-├── updateCampaignCreatorSocials/   ← Updates creator social data in campaigns
-├── getCampaignAssets/              ← Reads campaign asset data
-├── getCampaignPosts/               ← Reads campaign post data
-├── getCreatorsStudioDrafts/        ← Reads Studio draft data
-├── getStudioAssets/                ← Reads Studio asset data
-├── insertAmplifyAssets/            ← Writes Amplify asset data
-├── insertAmplifyDrafts/            ← Writes Amplify draft data
-├── insertStudioAssets/             ← Writes Studio asset data
-└── insertStudioDrafts/             ← Writes Studio draft data
-maintenance/                        ← Maintenance/utility scripts
+├── creator-outreach/              ← Studio + Amplify outreach (scan, email, store results)
+├── getBalancedUsers/              ← Retrieves users with balances
+├── loadUsers/                     ← Loads/reformats user data
+├── processInstagramComments/      ← Processes Instagram post comments
+├── refreshAllCampaignAnalytics/   ← Refreshes TikTok + Instagram campaign analytics
+├── refreshInstagramRates/         ← Updates Instagram suggested rates for creators
+├── refreshTikTokRates/            ← Updates TikTok suggested rates
+├── refreshTokens/                 ← Refreshes social API auth tokens
+├── updateCampaignCreatorSocials/  ← Updates creator social data in campaigns
+├── updateInstagramDemographics/   ← Updates Instagram demographic data
+maintenance/                       ← One-off utility scripts (not deployed functions)
 ```
 
 Each function folder contains:
-- `index.js` — function entry point
+- `index.js` — GCF registration (1-3 lines)
 - `package.json` — function-specific dependencies
-- Supporting `.js` files (e.g., `user.js`, `campaign.js`)
+- Supporting `.js` files with implementation
+
+The `maintenance/` directory holds data migration and one-off scripts (asset/draft inserts, analytics fixes, user queries). These are run manually and are not deployed as Cloud Functions.
 
 ---
 
-## 4. Libraries and frameworks
+## Function Structure
 
-| Library | Purpose |
-|---|---|
-| `@google-cloud/functions-framework` | Local GCF development/testing |
-| `firebase-admin` | Firebase Admin SDK (Firestore, Auth) |
-| `firebase` | Firebase client SDK |
-| `axios` | External API HTTP calls (Instagram, TikTok) |
-| `dotenv` | Local environment configuration |
+### One function per directory, index.js registers with framework
+```
+functions/
+  refreshTokens/
+    index.js       <- registers the function
+    influencer.js  <- implementation
+  processInstagramComments/
+    index.js
+    instagram.js
+```
 
----
+```js
+// index.js
+const functions = require("@google-cloud/functions-framework");
+const { refreshTiktokAccessTokens } = require("./influencer");
+functions.http("refreshTiktokAccessTokens", refreshTiktokAccessTokens);
+```
 
-## 5. Patterns used here
+### Wrap all functions with CORS
+```js
+const cors = require("cors")({ origin: true });
 
-### Function entry point
-```javascript
-// functions/{functionName}/index.js
-const functions = require('@google-cloud/functions-framework');
-
-functions.http('functionName', async (req, res) => {
-    // handler logic
-    res.json({ result: ... });
-});
+const myFunction = (req, res) => {
+  cors(req, res, async () => {
+    try {
+      // ... logic
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error("Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+};
 ```
 
 ### Local development
@@ -90,40 +88,187 @@ npm install
 npm run dev  # starts on http://localhost:8080
 ```
 
-### Firebase access
-Functions use `firebase-admin` for Firestore/Realtime Database access. Credentials are configured via GCP service account (not committed).
+---
 
-### External API integrations
-Instagram and TikTok APIs are called via `axios`. Tokens are stored in Firebase and refreshed by `refreshTokens/`.
+## Firebase Connection
+
+Legacy functions use the `PRODEV` environment variable pointing to a service account key:
+```js
+const firebase = require(process.env.PRODEV);
+```
+
+The `creator-outreach` function uses a multi-env pattern via `NODE_ENV` (`dev` | `staging` | `prod`), mapping to separate database URLs and key files. This is the preferred pattern for new functions.
 
 ---
 
-## 6. Anti-patterns to avoid
+## Firebase Batch Reads (Large Collections)
 
-- Committing API keys, Firebase credentials, or social API tokens in any function directory
+### Always paginate large Firebase reads in batches of 100
+```js
+const batchSize = 100;
+let lastKey = null;
+let moreUsers = true;
+
+while (moreUsers) {
+  let query = firebase.database().ref("users").orderByKey().limitToFirst(batchSize);
+  if (lastKey) query = query.startAfter(lastKey);
+
+  const snapshot = await query.once("value");
+  const users = snapshot.val();
+  const keys = users ? Object.keys(users) : [];
+
+  if (!users || keys.length === 0) break;
+  lastKey = keys[keys.length - 1];
+  if (keys.length < batchSize) moreUsers = false;
+
+  // Process batch...
+  await Promise.all(keys.map(key => processUser(key, users[key])));
+}
+```
+
+### Never read entire users collection at once
+```js
+// WRONG — will timeout or OOM on large collections (4,000+ users)
+const snap = await firebase.database().ref("users").once("value");
+```
+
+---
+
+## TikTok API
+
+### Token Refresh
+```js
+const body = new URLSearchParams({
+  client_key: process.env.TIKTOK_CLIENT_KEY,
+  client_secret: process.env.TIKTOK_CLIENT_SECRET,
+  grant_type: "refresh_token",
+  refresh_token: refreshToken,
+}).toString();
+
+const res = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body,
+});
+const data = await res.json();
+const newAccessToken = data.access_token;
+const newRefreshToken = data.refresh_token;
+```
+
+### Get user info (avatar, display name)
+```js
+const userRes = await fetch(
+  "https://open.tiktokapis.com/v2/user/info/?fields=avatar_url,display_name,follower_count",
+  { headers: { Authorization: `Bearer ${accessToken}` } }
+);
+const { data: { user } } = await userRes.json();
+// user.avatar_url, user.display_name, user.follower_count
+```
+
+### Write both new access_token AND refresh_token back to Firebase
+```js
+await firebase.database().ref(`users/${uid}/creator_socials/tiktok`).update({
+  access_token: data.access_token,
+  refresh_token: data.refresh_token, // TikTok rotates refresh tokens
+  updated_at: Date.now(),
+});
+```
+
+TikTok rotates refresh tokens on each use. Only updating `access_token` invalidates the old `refresh_token`.
+
+---
+
+## Instagram / Facebook Graph API
+
+### Long-lived token info
+- Tokens last **60 days** and cannot be refreshed after expiry
+- Stored at: `users/{uid}/creator_socials/instagram/access_token`
+- Business account ID: `users/{uid}/creator_socials/instagram/instagram_business_account_id`
+
+### Get IG profile picture
+```js
+const url = `https://graph.facebook.com/v24.0/${igBusinessAccountId}?fields=profile_picture_url,username&access_token=${accessToken}`;
+const res = await fetch(url);
+const data = await res.json();
+
+// Handle expired tokens
+if (data.error?.code === 190) {
+  console.log(`Token expired for user ${uid}`);
+  return;
+}
+// data.profile_picture_url, data.username
+```
+
+Always handle error code 190 (expired token) — never assume IG tokens are valid.
+
+---
+
+## Token Storage in Firebase
+
+```
+users/{uid}/creator_socials/
+  instagram/
+    access_token              — FB long-lived token (60 days, no refresh)
+    instagram_business_account_id
+    username
+  tiktok/
+    access_token              — TikTok access token
+    refresh_token             — TikTok refresh token (rotates on each use)
+    avatar_url                — cached from last refresh
+    display_name
+```
+
+Cache profile data during token refresh to avoid extra API calls.
+
+---
+
+## Error Handling
+
+### Log errors and continue processing other users (batch jobs)
+```js
+const promises = userKeys.map(async (uid) => {
+  try {
+    await processUser(uid, users[uid]);
+  } catch (error) {
+    console.error(`Error processing user ${uid}:`, error.message);
+    // don't throw — let other users continue processing
+  }
+});
+await Promise.all(promises);
+```
+
+Never let one user's error kill the entire batch.
+
+---
+
+## Concurrency
+
+### Batch Promise.all within each page, not across all users
+```js
+// Process each page of 100 users concurrently, but page-by-page
+while (moreUsers) {
+  // ... fetch batch
+  await Promise.all(keys.map(key => processUser(key, users[key])));
+}
+```
+
+Never collect all promises across pages and await at the end — 4,000 simultaneous Firebase writes will overwhelm the connection pool.
+
+---
+
+## Anti-patterns
+
+- Committing API keys, Firebase credentials, or social API tokens
 - Sharing state between functions — each function is stateless and independently deployed
-- Adding long-running synchronous operations — GCF has execution time limits
-- Duplicating Firebase access logic that already exists in `api/` — check if the operation belongs in the Express API instead
+- Reading the entire `users` collection at once — always paginate
+- Long-running synchronous operations — GCF has execution time limits
+- Letting one user's error crash an entire batch job
 
 ---
 
-## 7. Guidance for future code changes
-
-**To add a new function:**
-1. Create a new directory under `functions/`
-2. Add `index.js` with the function handler and `package.json`
-3. Test locally: `npm run dev`
-4. Deploy via GCloud CLI: `gcloud functions deploy {functionName} --runtime nodejs18 --trigger-http`
-
-**Before editing an existing function:**
-- Read its `index.js` fully — functions can be short but dense
-- Check if the same operation could be done in `api/` instead (avoids split ownership)
-
----
-
-## 8. Open questions / ambiguities
-
-- This directory is a separate git repository root — `git` operations here are scoped to its own history, separate from the crafted_web root repo.
-- The `maintenance/` folder contains maintenance scripts — their purpose and operational context are not documented.
-- Some function names suggest overlapping concerns with `api/` services (e.g., `refreshAllCampaignAnalytics` vs `AIReportsService.js` in api) — check both before making analytics-related changes.
-- Deployment automation status is unclear — functions may be manually deployed via CLI rather than CI/CD.
+## Git Commit Convention
+```
+feat: add Instagram profile picture caching during token refresh
+fix: handle TikTok refresh_token rotation correctly
+chore: update Firebase SDK
+```

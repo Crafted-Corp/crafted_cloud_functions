@@ -4,7 +4,7 @@ const cors = require("cors")({ origin: true });
 const xlsx = require("xlsx");
 
 const insertCampaignDrafts = async (req, res) => {
-  const workbook = xlsx.readFile("amplify_assets_recovery.xlsx");
+  const workbook = xlsx.readFile("amplify_assets_recovery.csv");
 
   cors(req, res, async () => {
     workbook.SheetNames.forEach(async (sheetName) => {
@@ -16,7 +16,7 @@ const insertCampaignDrafts = async (req, res) => {
         const taskId = row["taskId"];
         const brandId = row["brandId"];
         const creatorId = row["creatorId"];
-        const s3Link = row["s3 links"];
+        const s3Link = row["s3Link"];
 
         const logObject = { campaignId, taskId, creatorId, s3Link };
 

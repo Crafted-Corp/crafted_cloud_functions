@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "functions-framework --target=findCreatorsForStudioBrief",
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "functions-framework --target=insertSinglePostLink"
   },
   "keywords": [],
   "author": "",

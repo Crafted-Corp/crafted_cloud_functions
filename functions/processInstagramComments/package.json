@@ -35,8 +35,6 @@
     "node-cron": "^3.0.2",
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.9.5",
-    "openai": "^4.29.2",
-    "puppeteer": "^19.7.0",
     "stripe": "^8.222.0"
   }
 }

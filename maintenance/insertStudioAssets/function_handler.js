@@ -4,7 +4,7 @@ const cors = require("cors")({ origin: true });
 const xlsx = require("xlsx");
 
 const insertCampaignDrafts = async (req, res) => {
-  const workbook = xlsx.readFile("studio_assets_recovery.xlsx");
+  const workbook = xlsx.readFile("studio_assets_recovery.csv");
 
   cors(req, res, async () => {
     workbook.SheetNames.forEach(async (sheetName) => {
@@ -12,15 +12,14 @@ const insertCampaignDrafts = async (req, res) => {
       const data = xlsx.utils.sheet_to_json(worksheet);
 
       data.forEach(async (row) => {
-        const campaignId = row["campaignId"];
         const taskId = row["taskId"];
         const brandId = row["brandId"];
         const creatorId = row["creatorId"];
         const s3Link = row["s3Link"];
 
-        const logObject = { campaignId, taskId, creatorId, s3Link };
+        const logObject = { taskId, creatorId, s3Link };
 
-        if (!brandId || !campaignId || !taskId || !creatorId || !s3Link) {
+        if (!brandId || !taskId || !creatorId || !s3Link) {
           console.error("Missing data in row:", logObject);
           return;
         }
@@ -47,7 +46,7 @@ const insertCampaignDrafts = async (req, res) => {
         for (const key in brandAssets) {
           if (
             brandAssets[key].task_id === taskId &&
-            brandAssets[key].creator_id === creatorId &&
+            brandAssets[key].creator_uid === creatorId &&
             brandAssets[key].type === "video"
           ) {
             brandAssetId = key;
@@ -77,6 +76,16 @@ const insertCampaignDrafts = async (req, res) => {
           }
         }
 
+        if (!brandAssetId || !creatorAssetId || !taskAssetId) {
+          console.error("Missing data in row:", {
+            brandAssetId,
+            creatorAssetId,
+            taskAssetId,
+          });
+          return;
+        }
+
+        console.log("creatorId: ", creatorId);
         console.log("brandAssetId: ", brandAssetId);
         console.log("creatorAssetId: ", creatorAssetId);
 
@@ -85,12 +94,6 @@ const insertCampaignDrafts = async (req, res) => {
             firebase
               .database()
               .ref(`brands/${brandId}/brand_assets/${brandAssetId}/source`)
-              .set(s3Link),
-            firebase
-              .database()
-              .ref(
-                `influencer_campaigns/${campaignId}/tasks/${taskId}/assets/${creatorId}/source`,
-              )
               .set(s3Link),
             firebase
               .database()
