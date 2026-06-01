@@ -17,14 +17,40 @@ dev → main
 
 ---
 
+## Repository Structure
+
+```
+functions/
+├── creator-outreach/              ← Studio + Amplify outreach (scan, email, store results)
+├── getBalancedUsers/              ← Retrieves users with balances
+├── loadUsers/                     ← Loads/reformats user data
+├── processInstagramComments/      ← Processes Instagram post comments
+├── refreshAllCampaignAnalytics/   ← Refreshes TikTok + Instagram campaign analytics
+├── refreshInstagramRates/         ← Updates Instagram suggested rates for creators
+├── refreshTikTokRates/            ← Updates TikTok suggested rates
+├── refreshTokens/                 ← Refreshes social API auth tokens
+├── updateCampaignCreatorSocials/  ← Updates creator social data in campaigns
+├── updateInstagramDemographics/   ← Updates Instagram demographic data
+maintenance/                       ← One-off utility scripts (not deployed functions)
+```
+
+Each function folder contains:
+- `index.js` — GCF registration (1-3 lines)
+- `package.json` — function-specific dependencies
+- Supporting `.js` files with implementation
+
+The `maintenance/` directory holds data migration and one-off scripts (asset/draft inserts, analytics fixes, user queries). These are run manually and are not deployed as Cloud Functions.
+
+---
+
 ## Function Structure
 
-### ✅ DO: One function per directory, index.js registers with framework
+### One function per directory, index.js registers with framework
 ```
 functions/
   refreshTokens/
-    index.js       ← registers the function
-    influencer.js  ← implementation
+    index.js       <- registers the function
+    influencer.js  <- implementation
   processInstagramComments/
     index.js
     instagram.js
@@ -37,11 +63,11 @@ const { refreshTiktokAccessTokens } = require("./influencer");
 functions.http("refreshTiktokAccessTokens", refreshTiktokAccessTokens);
 ```
 
-### ✅ DO: Wrap all functions with CORS
+### Wrap all functions with CORS
 ```js
 const cors = require("cors")({ origin: true });
 
-const myFunction = async (req, res) => {
+const myFunction = (req, res) => {
   cors(req, res, async () => {
     try {
       // ... logic
@@ -54,24 +80,30 @@ const myFunction = async (req, res) => {
 };
 ```
 
+### Local development
+```bash
+cd functions/{function-name}
+npm install
+# Create .env with required variables
+npm run dev  # starts on http://localhost:8080
+```
+
 ---
 
 ## Firebase Connection
 
-### ✅ DO: Use environment variable for Firebase config path
+Legacy functions use the `PRODEV` environment variable pointing to a service account key:
 ```js
-const firebase = require(process.env.PRODEV); // points to correct serviceAccountKey.json
+const firebase = require(process.env.PRODEV);
 ```
 
-### Environment variables
-- `PRODEV` — path to Firebase service account key file
-- Set per environment (dev/staging/prod) in Cloud Functions config
+The `creator-outreach` function uses a multi-env pattern via `NODE_ENV` (`dev` | `staging` | `prod`), mapping to separate database URLs and key files. This is the preferred pattern for new functions.
 
 ---
 
 ## Firebase Batch Reads (Large Collections)
 
-### ✅ DO: Always paginate large Firebase reads in batches of 100
+### Always paginate large Firebase reads in batches of 100
 ```js
 const batchSize = 100;
 let lastKey = null;
@@ -94,7 +126,7 @@ while (moreUsers) {
 }
 ```
 
-### ❌ DON'T: Read entire users collection at once
+### Never read entire users collection at once
 ```js
 // WRONG — will timeout or OOM on large collections (4,000+ users)
 const snap = await firebase.database().ref("users").once("value");
@@ -106,10 +138,9 @@ const snap = await firebase.database().ref("users").once("value");
 
 ### Token Refresh
 ```js
-// TikTok OAuth token refresh
 const body = new URLSearchParams({
-  client_key: "awdpgd7ih1asm72a",
-  client_secret: "357014f753c08457f74c0e3115a2c3c1",
+  client_key: process.env.TIKTOK_CLIENT_KEY,
+  client_secret: process.env.TIKTOK_CLIENT_SECRET,
   grant_type: "refresh_token",
   refresh_token: refreshToken,
 }).toString();
@@ -134,7 +165,7 @@ const { data: { user } } = await userRes.json();
 // user.avatar_url, user.display_name, user.follower_count
 ```
 
-### ✅ DO: Write both new access_token AND refresh_token back to Firebase
+### Write both new access_token AND refresh_token back to Firebase
 ```js
 await firebase.database().ref(`users/${uid}/creator_socials/tiktok`).update({
   access_token: data.access_token,
@@ -143,11 +174,7 @@ await firebase.database().ref(`users/${uid}/creator_socials/tiktok`).update({
 });
 ```
 
-### ❌ DON'T: Only update access_token — refresh_token also rotates
-```js
-// WRONG — old refresh_token becomes invalid after use
-await firebase.database().ref(`users/${uid}/creator_socials/tiktok/access_token`).set(data.access_token);
-```
+TikTok rotates refresh tokens on each use. Only updating `access_token` invalidates the old `refresh_token`.
 
 ---
 
@@ -172,18 +199,12 @@ if (data.error?.code === 190) {
 // data.profile_picture_url, data.username
 ```
 
-### ❌ DON'T: Assume IG tokens are valid — always handle error code 190
-```js
-// WRONG — will throw on expired token
-const { data } = await axios.get(igUrl);
-const pic = data.profile_picture_url; // undefined if token expired
-```
+Always handle error code 190 (expired token) — never assume IG tokens are valid.
 
 ---
 
 ## Token Storage in Firebase
 
-### User social token paths
 ```
 users/{uid}/creator_socials/
   instagram/
@@ -197,22 +218,13 @@ users/{uid}/creator_socials/
     display_name
 ```
 
-### ✅ DO: Cache profile data during token refresh to avoid extra API calls
-```js
-await firebase.database().ref(`users/${uid}/creator_socials/tiktok`).update({
-  access_token: data.access_token,
-  refresh_token: data.refresh_token,
-  avatar_url: userInfo.avatar_url,      // cache it here
-  display_name: userInfo.display_name,  // cache it here
-  updated_at: Date.now(),
-});
-```
+Cache profile data during token refresh to avoid extra API calls.
 
 ---
 
 ## Error Handling
 
-### ✅ DO: Log errors and continue processing other users (batch jobs)
+### Log errors and continue processing other users (batch jobs)
 ```js
 const promises = userKeys.map(async (uid) => {
   try {
@@ -225,34 +237,32 @@ const promises = userKeys.map(async (uid) => {
 await Promise.all(promises);
 ```
 
-### ❌ DON'T: Let one user's error kill the entire batch
-```js
-// WRONG
-await Promise.all(userKeys.map(uid => processUser(uid, users[uid]))); // one error kills all
-```
+Never let one user's error kill the entire batch.
 
 ---
 
 ## Concurrency
 
-### ✅ DO: Batch Promise.all within each page, not across all users
+### Batch Promise.all within each page, not across all users
 ```js
 // Process each page of 100 users concurrently, but page-by-page
 while (moreUsers) {
   // ... fetch batch
-  await Promise.all(keys.map(key => processUser(key, users[key]))); // ✅ 100 concurrent
+  await Promise.all(keys.map(key => processUser(key, users[key])));
 }
 ```
 
-### ❌ DON'T: Collect all promises and await at the end
-```js
-// WRONG — 4000 simultaneous Firebase writes will overwhelm connection pool
-const allPromises = [];
-while (moreUsers) {
-  allPromises.push(...keys.map(key => processUser(key, users[key])));
-}
-await Promise.all(allPromises); // explodes
-```
+Never collect all promises across pages and await at the end — 4,000 simultaneous Firebase writes will overwhelm the connection pool.
+
+---
+
+## Anti-patterns
+
+- Committing API keys, Firebase credentials, or social API tokens
+- Sharing state between functions — each function is stateless and independently deployed
+- Reading the entire `users` collection at once — always paginate
+- Long-running synchronous operations — GCF has execution time limits
+- Letting one user's error crash an entire batch job
 
 ---
 
