@@ -5,7 +5,7 @@ const studioSchema = z.object({
   brand_id: z.string().min(1),
   message: z.string().default(""),
   task: z.object({
-    id: z.string(),
+    id: z.string().optional(),
     uid: z.string(),
     name: z.string(),
     regions: z.array(z.object({ value: z.string() })).min(1),
