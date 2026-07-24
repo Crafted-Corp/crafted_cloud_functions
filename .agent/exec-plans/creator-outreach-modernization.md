@@ -30,7 +30,7 @@ Out of scope (future, separately green-lit): the other nine functions and the se
 ## Progress
 
 - [x] M1: Root workspace scaffolding (`package.json`, `nx.json`, `commitlint.config.js`, `.nvmrc`, `.gitignore` additions). (done 2026-07-24)
-- [ ] M2: `packages/shared-config/` (Biome config + scoped lint-staged + package.json), mirror of `crafted-src`.
+- [x] M2: `packages/shared-config/` (Biome config + scoped lint-staged + package.json), mirror of `crafted-src`. (done 2026-07-24)
 - [ ] M3: TypeScript migration of `functions/creator-outreach/` source (`index.ts`, `function-handler.ts`, `lib/*.ts`) + `tsconfig.json` + build-at-deploy wiring (`gcp-build`, `main`) + regenerated standalone lockfile + `.gcloudignore`.
 - [ ] M4: Biome wiring for the function (`biome.json` extends shared-config; `check`/`check:ci`/`lint`/`format` scripts) + `typecheck` script.
 - [ ] M5: vitest unit tests under `functions/creator-outreach/__tests__/` (schemas, scanner matchers, email result extraction + Amplify rate calc, handler validate/scan/email/store/respond + logging), mocking the side-effect lib modules.
@@ -73,6 +73,12 @@ These are carried forward from the superseded draft (still valid) plus new findi
 
 - Observation (2026-07-24, M1): **There is no `.github/` directory in this repo at all** — no `.github/workflows/`, and specifically no `deploy-creator-outreach.yml` on disk on the `dev` base. The workflow referenced in the Surprise above and in M10 must live in the deployed GitHub repository's default branch but is not present in this `dev` worktree. Consequence: **M10's "retire the old single-project `deploy-creator-outreach.yml`" step is a no-op on this branch** — there is nothing to delete here. M8/M9 create `.github/workflows/` from scratch. If the file does exist on the remote default branch, its removal has to be handled there (or it will simply be absent from this branch's tree and superseded once the new workflows land); confirm on the remote before assuming M10 deleted it.
   Evidence: `ls .github` → "No such file or directory"; repo root on `dev` contains only `.agent/`, `functions/`, `maintenance/`, `CLAUDE.md`, `README.md`, `.gitignore`, `.git`.
+
+- Observation (2026-07-24, M2): **`biome check <subdir>` run from the workspace root fails with "Found a nested root configuration, but there's already a root configuration"** — this is inherent Biome 2.3.x monorepo behavior, not a config error, and it **reproduces identically in `crafted-src`** (e.g. `biome check apps/reporting-service` from the crafted-src root errors the same way). A `biome.json` without `"root": false` is a root config; running from the workspace root finds two roots (the workspace root project + the nested config) and refuses. Consequence: Biome must be invoked **per-project with cwd = the project directory** (exactly how Nx runs it via each package's `check`/`lint`/`format` script), where only one config is in scope. This shapes M4 (the function's `check`/`check:ci` scripts run in the function dir) and M8 (CI runs `npm run check:ci` → `nx run-many`, which sets per-project cwd — never a bare `biome check <subdir>` from root). The M2 acceptance ("resolves the extended config") is satisfied by the `node_modules/@crafted/shared-config` symlink + the `./biome` export target both resolving, verified via a per-project `biome check .` inside `packages/shared-config`.
+  Evidence: `cd packages/shared-config && biome check .` runs (4 inherent `useBiomeIgnoreFolder` warnings from the verbatim config, no config error); the same command from the worktree root errors; crafted-src reproduces.
+
+- Observation (2026-07-24, M2): The verbatim-copied `packages/shared-config/biome.json` (mirrored from crafted-src) emits 4 `lint/suspicious/useBiomeIgnoreFolder` **warnings** — since Biome 2.2.0 a folder ignore no longer needs a trailing `/**` (`!node_modules/**` → `!node_modules`). These are warnings, not errors, and are **present in crafted-src's own shared-config too**, so the file was kept verbatim to preserve the mirror. If a future cleanup wants a warning-free config, drop the `/**` suffixes in the shared-config `includes` (and propagate to crafted-src to keep them identical).
+  Evidence: `cd packages/shared-config && biome check .` → "Found 4 warnings"; identical output in crafted-src's `packages/shared-config`.
 
 
 ## Decision Log
