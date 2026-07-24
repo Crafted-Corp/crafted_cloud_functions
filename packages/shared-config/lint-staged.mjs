@@ -1,4 +1,5 @@
 export default {
-    "functions/creator-outreach/**/*.{js,mjs,cjs,ts,json}": ["biome check --write --files-ignore-unknown=true"],
-    "packages/**/*.{js,mjs,cjs,ts,json}": ["biome check --write --files-ignore-unknown=true"],
+    "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
+        "biome check --write --files-ignore-unknown=true", // Check formatting and lint
+    ],
 };
