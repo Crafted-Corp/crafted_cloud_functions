@@ -1,5 +1,5 @@
-const functions = require("@google-cloud/functions-framework");
-const { creatorOutreach } = require("./function-handler");
+import * as functions from "@google-cloud/functions-framework";
+import { creatorOutreach } from "./function-handler";
 
 // Canonical target name for this function is "creator-outreach" (kebab-case,
 // matching the directory). The registered target here, the gcloud

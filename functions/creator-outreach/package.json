@@ -2,14 +2,20 @@
   "name": "creator-outreach",
   "version": "1.0.0",
   "description": "Unified creator outreach function for Studio and Amplify products",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "dev": "functions-framework --target=creatorOutreach",
-    "start": "node index.js"
+    "build": "tsc -p tsconfig.json && cp -R templates dist/templates",
+    "gcp-build": "npm run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "npm run build && functions-framework --target=creator-outreach",
+    "start": "functions-framework --target=creator-outreach"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.0.0",
     "@sendgrid/mail": "^7.7.0",
@@ -19,5 +25,11 @@
     "firebase-admin": "^9.9.0",
     "handlebars": "^4.7.8",
     "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "@types/node": "^22.0.0",
+    "@types/cors": "^2.8.17",
+    "vitest": "^3.0.0"
   }
 }
