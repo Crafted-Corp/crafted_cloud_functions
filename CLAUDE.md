@@ -43,6 +43,75 @@ The `maintenance/` directory holds data migration and one-off scripts (asset/dra
 
 ---
 
+## Tooling & Standards (creator-outreach reference)
+
+`functions/creator-outreach/` is the **modernization reference** and is the only function on the
+tooling below. **Every other function in `functions/` remains on the legacy per-directory
+JavaScript pattern** (standalone `package.json`, no shared lint/type/test, no CI) documented in
+the rest of this file. Migrating the rest to this template is future, separately green-lit work.
+Full design context: `.agent/exec-plans/creator-outreach-modernization.md`.
+
+- **npm workspace + Nx.** The repo root is a private npm workspace (`workspaces: ["packages/*",
+  "functions/creator-outreach"]`) orchestrated by Nx. Root scripts fan out per-project via
+  `nx run-many -t <target>`: `npm run check:ci`, `npm run typecheck`, `npm run test:ci`,
+  `npm run build`. Only `creator-outreach` is a member, so these never touch sibling functions.
+- **TypeScript.** `creator-outreach` is strict TypeScript; CI runs an explicit `tsc --noEmit`
+  typecheck in addition to the build. Runtime is `nodejs22` throughout (`engines`, `.nvmrc`,
+  `tsc` `target: ES2022`, the `google-22` buildpack builder, and every `--runtime=nodejs22`).
+- **Biome** via `@crafted/shared-config` (`packages/shared-config/`, mirror of crafted-src): the
+  function's `biome.json` `extends` `@crafted/shared-config/biome` (4-space indent, 120-char
+  lines, double quotes). Biome is a **root-level dev tool only** — never a function dependency.
+  Because Biome 2.x refuses a nested-root config from the workspace root, it is always run
+  per-project with cwd = the project dir (which is exactly how Nx invokes each package's
+  `check:ci`).
+- **vitest** unit tests under `functions/creator-outreach/__tests__/`; the import-time-side-effect
+  modules (`lib/firebase`, `lib/sentry`, `@sendgrid/mail`) are mocked.
+- **commitlint + husky.** Conventional Commits enforced by the `commit-msg` hook; `pre-commit`
+  runs lint-staged (Biome, per-package `.lintstagedrc.mjs` placement) + tests. `prepare: husky`
+  lives **only** in the root `package.json` — never in the function manifest (a `prepare` script
+  would run during the GCF build, which has no `.git`, and could fail the deploy).
+- **CI/CD.** `.github/workflows/creator-outreach-build.yml` runs `quality` (Biome + typecheck +
+  vitest) and `build-preview` (a `pack build` buildpack **dry-run**, credential-free) on PRs with
+  no deploy, then deploys on push to `dev` (→ `crafted-dev-v1`) and `main` (→ `crafted-staging-v1`).
+  `.github/workflows/creator-outreach-deploy-prod.yml` is the `workflow_dispatch` prod promotion,
+  gated by the `prod` GitHub Environment's required reviewer. Env-scoped secrets/variables live in
+  the three GitHub Environments (`dev`/`staging`/`prod`) — see the "Secrets & Variables Matrix" in
+  the ExecPlan.
+
+### TS build-at-deploy contract (do not break)
+
+GCF Gen2 uploads **TypeScript source** and builds it at deploy: `npm ci` against the standalone
+nested `package-lock.json`, then the `gcp-build` script (`tsc` + copy `templates/*.hbs` into
+`dist/templates/`); `package.json` `"main": "dist/index.js"`. Therefore:
+
+- `tsconfig.json` is **self-contained** — no `extends` of a workspace path.
+- The function manifest **never** lists `@crafted/shared-config` (or any private workspace pkg).
+- `functions/creator-outreach/package-lock.json` is standalone and public-registry-only, and is
+  **not** maintained by a root `npm install` — regenerate it deliberately when deps change (see
+  the ExecPlan "Concrete Steps"). The PR `pack build` runs `npm ci` and fails on lockfile drift.
+- The registered target, `--entry-point`, and deployed name are all the identical string
+  `creator-outreach`; the templates must land under `dist/` or `lib/email.ts` throws at cold start.
+
+### GCF infra (Gen2 / Cloud Run-backed) — per environment
+
+Identical shape across environments; only the project, `NODE_ENV`, and Firebase key differ.
+`NODE_ENV` (set via `env.yaml`) selects the Firebase database URL + `config/*ServiceAccountKey.json`
+in `lib/firebase.ts` and the Sentry `environment`.
+
+| Setting | Value |
+|---|---|
+| Generation / runtime | Gen2 (Cloud Run-backed), nodejs22 |
+| Region | `us-central1` |
+| Entry point / target / deployed name | `creator-outreach` (all identical) |
+| Trigger | HTTP |
+| Resources / concurrency / timeout / max | 2 vCPU, 4Gi, concurrency 1, 3600s, max 50 |
+| Runtime service account | default compute `<PROJECT_NUMBER>-compute@developer.gserviceaccount.com` |
+| Runtime env | `NODE_ENV=<dev\|staging\|prod>`, `LOG_EXECUTION_ID=true` |
+| Auth | `--allow-unauthenticated` (public `allUsers` invoker) in all 3 envs — hardening deferred to ticket [353] / `server/.agent/exec-plans/creator-outreach-auth.md` |
+| dev / staging / prod project | `crafted-dev-v1` / `crafted-staging-v1` / `crafted-v1` |
+
+---
+
 ## Function Structure
 
 ### One function per directory, index.js registers with framework

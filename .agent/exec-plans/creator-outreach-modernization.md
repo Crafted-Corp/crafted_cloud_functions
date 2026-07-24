@@ -39,7 +39,7 @@ Out of scope (future, separately green-lit): the other nine functions and the se
 - [x] M8: PR/build workflow `.github/workflows/creator-outreach-build.yml` — `quality` job (Biome + `tsc --noEmit` + vitest) and `build-preview` job (`pack build`); no deploy on pull requests. (done 2026-07-24)
 - [x] M9: Multi-env deploy jobs in the same workflow — `deploy-dev` (`dev` branch → `crafted-dev-v1`) and `deploy-staging` (`main` → `crafted-staging-v1`), using GitHub Environments `dev`/`staging` and env-scoped secrets; materialize the matching Firebase key + `NODE_ENV`. (done 2026-07-24)
 - [x] M10: Manual production workflow `.github/workflows/creator-outreach-deploy-prod.yml` — `workflow_dispatch`, environment `prod` (required reviewer), → `crafted-v1`, `NODE_ENV=prod`; retire the old single-project `deploy-creator-outreach.yml` (**no-op on this branch — the file does not exist here; see M10 Surprise**). (done 2026-07-24)
-- [ ] M11: Documentation (final phase, after implementation) — update `README.md` to describe the new creator-outreach **infrastructure** (gen2/Cloud Run functions, the 3-project multi-env layout, the CI/CD flow, the TS build-at-deploy mechanism, the auth model from ticket [353]) and add copy-pasteable **manual deploy instructions** (local `gcloud functions deploy --gen2` per env + how to run the manual prod-promotion workflow); update the `CLAUDE.md` tooling section; write release notes with a per-environment deploy checklist and a manual test suite.
+- [x] M11: Documentation (final phase, after implementation) — updated `README.md` (creator-outreach infrastructure section: gen2/Cloud Run, 3-project multi-env layout, CI/CD flow, TS build-at-deploy mechanism, prominent `--allow-unauthenticated` auth model + [353] hardening; copy-pasteable per-env `gcloud functions deploy --gen2` + GitHub-native prod-promotion instructions; corrected stale folder/function list — no `studioOutreach`); added the `CLAUDE.md` "Tooling & Standards (creator-outreach reference)" section (TS-build-at-deploy contract + per-env GCF infra table); wrote release notes with a per-environment deploy checklist (`releases/2026-W30/creator-outreach-modernization.md`) and a manual test suite (`releases/2026-W30/creator-outreach-modernization-test-plan.md`). Locale coverage N/A (infra feature, no localized UI). (done 2026-07-24)
 - [ ] M12: Auth-hardening cross-reference — confirm the coordinated fast-follow (server token + drop `--allow-unauthenticated`) is tracked in `server/.agent/exec-plans/creator-outreach-auth.md`; leave `--allow-unauthenticated` in this plan's deploy until then.
 
 
@@ -181,7 +181,56 @@ These are carried forward from the superseded draft (still valid) plus new findi
 
 ## Outcomes & Retrospective
 
-(To be filled at completion.)
+Entry (2026-07-24, M11 — closing milestone). M1–M11 are implemented and committed on
+`feature/creator-outreach-modernization`; M12 (auth hardening) remains explicitly out of scope for
+this run.
+
+**What shipped (M1–M11).** `functions/creator-outreach/` is now strict TypeScript built at deploy
+via a `gcp-build` script (`tsc` + `templates/*.hbs` → `dist/templates/`; `main: dist/index.js`),
+with a self-contained `tsconfig.json` and a standalone nested `package-lock.json` — the deploy
+contract that keeps the private `@crafted/shared-config` workspace dep out of the function
+manifest. Tooling mirrors `crafted-src`: a root npm workspace + Nx, `packages/shared-config/`
+(Biome + per-package lint-staged), Biome via `extends`, vitest unit tests (schemas, scanner
+matchers, email result/rate extraction, handler validate/scan/email/store/respond + logging), and
+husky + commitlint (`prepare: husky` root-only). CI/CD is two workflows:
+`creator-outreach-build.yml` (`quality` = Biome + `tsc --noEmit` + vitest; `build-preview` =
+`pack build` dry-run; branch-guarded `deploy-dev` → `crafted-dev-v1`, `deploy-staging` →
+`crafted-staging-v1`) and `creator-outreach-deploy-prod.yml` (`workflow_dispatch` → `crafted-v1`,
+`prod` Environment required-reviewer gate). M11 documented all of it: the `README.md`
+infrastructure + manual-deploy sections, the `CLAUDE.md` tooling section, release notes with a
+per-env deploy checklist, and a manual test suite.
+
+**The proven build model.** M7 was the critical checkpoint: a credential-free `pack build` against
+`gcr.io/buildpacks/builder:google-22` ran `npm ci` → `gcp-build` (tsc + template copy) →
+`node --check dist/index.js` → image export, exit 0. That removed the plan's highest risk (that
+the GCF Gen2 buildpack runs `gcp-build` at deploy) before any real deploy, and the same `pack build`
+gates every PR (`build-preview`), so lockfile drift or a broken template path fails the PR rather
+than a deploy.
+
+**Against the plan's Purpose.** The Purpose set five reader-facing outcomes — edit in TypeScript
+with `tsc` catching errors; run `check:ci`/`test:ci`; commit through the hooks; open a PR that runs
+typecheck + Biome + vitest + a credential-free buildpack dry-run with no deploy; and per-branch
+deploys to three projects with a manual prod promotion. All five are implemented in the tree and
+documented so a novice can go clone → green PR → dev deploy, and understand the manual per-env
+deploy and the prod promotion, from the docs alone. Scope held: only `creator-outreach` was
+migrated; the other nine functions and the `maintenance/` scripts remain legacy per-directory JS.
+
+**Auth posture (deliberate).** The function ships with `--allow-unauthenticated` (public `allUsers`
+invoker) in all three environments — preserved intentionally so the running `server` → CF
+fire-and-forget integration keeps working. This is documented prominently in `README.md`,
+`CLAUDE.md`, and the release notes, with the org-policy risk called out.
+
+**What remains.**
+- **M12 (out of scope for this run):** the auth-hardening fast-follow — `server` attaches a
+  Google-signed OIDC token (audience = the CF URL), the server's invoker SA gets
+  `roles/run.invoker`, and only then is `--allow-unauthenticated` removed, CF and server shipping
+  together. Tracked in `server/.agent/exec-plans/creator-outreach-auth.md` (Notion ticket [353]).
+- **Live post-push verification:** this run did not push or deploy. The operator performs the
+  deploy-checklist steps (configure the three GitHub Environments + secrets/variables + the `prod`
+  required reviewer; grant the deploy-SA IAM roles; push `dev`/`main`; run the manual prod
+  workflow) and the live URL checks (Studio 200 / Amplify 200 / invalid 400) per the release notes
+  and manual test suite. The org-policy interaction with `--allow-unauthenticated` (ExecPlan Risks)
+  is verified for real only at the first dev deploy.
 
 
 ## Context and Orientation
