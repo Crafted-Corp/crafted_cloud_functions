@@ -29,7 +29,7 @@ Out of scope (future, separately green-lit): the other nine functions and the se
 
 ## Progress
 
-- [ ] M1: Root workspace scaffolding (`package.json`, `nx.json`, `commitlint.config.js`, `.nvmrc`, `.gitignore` additions).
+- [x] M1: Root workspace scaffolding (`package.json`, `nx.json`, `commitlint.config.js`, `.nvmrc`, `.gitignore` additions). (done 2026-07-24)
 - [ ] M2: `packages/shared-config/` (Biome config + scoped lint-staged + package.json), mirror of `crafted-src`.
 - [ ] M3: TypeScript migration of `functions/creator-outreach/` source (`index.ts`, `function-handler.ts`, `lib/*.ts`) + `tsconfig.json` + build-at-deploy wiring (`gcp-build`, `main`) + regenerated standalone lockfile + `.gcloudignore`.
 - [ ] M4: Biome wiring for the function (`biome.json` extends shared-config; `check`/`check:ci`/`lint`/`format` scripts) + `typecheck` script.
@@ -70,6 +70,9 @@ These are carried forward from the superseded draft (still valid) plus new findi
 
 - Observation: The current deployed infra is **Gen2 (Cloud Run-backed)**, previously nodejs20, and there is exactly one existing workflow (`deploy-creator-outreach.yml`) which deploys to a single project selected by the `GCP_PROJECT` repo variable on push to `main`, with `--allow-unauthenticated`.
   Evidence: `.github/workflows/deploy-creator-outreach.yml`.
+
+- Observation (2026-07-24, M1): **There is no `.github/` directory in this repo at all** — no `.github/workflows/`, and specifically no `deploy-creator-outreach.yml` on disk on the `dev` base. The workflow referenced in the Surprise above and in M10 must live in the deployed GitHub repository's default branch but is not present in this `dev` worktree. Consequence: **M10's "retire the old single-project `deploy-creator-outreach.yml`" step is a no-op on this branch** — there is nothing to delete here. M8/M9 create `.github/workflows/` from scratch. If the file does exist on the remote default branch, its removal has to be handled there (or it will simply be absent from this branch's tree and superseded once the new workflows land); confirm on the remote before assuming M10 deleted it.
+  Evidence: `ls .github` → "No such file or directory"; repo root on `dev` contains only `.agent/`, `functions/`, `maintenance/`, `CLAUDE.md`, `README.md`, `.gitignore`, `.git`.
 
 
 ## Decision Log
@@ -117,6 +120,10 @@ These are carried forward from the superseded draft (still valid) plus new findi
 - Decision: **Defer auth hardening to a coordinated fast-follow**; this plan's deploy keeps `--allow-unauthenticated`.
   Rationale: Removing public access requires the `server` to attach a Google-signed OIDC token first, or every blast 403s. That is a cross-repo change (Notion ticket [353]) owned by `server/.agent/exec-plans/creator-outreach-auth.md`. Shipping the modernization without breaking the running integration is the priority; the auth flip is sequenced separately so CF and server ship together. See Risks.
   Date/Author: 2026-07-24, tech-lead
+
+- Decision: **Add a root `typecheck` npm script (`nx run-many -t typecheck`) and a cacheable `typecheck` Nx targetDefault** — neither exists in the mirrored `crafted-src` root (its Lambdas type-check implicitly via esbuild/`tsc` in their own `build`).
+  Rationale: This is required plumbing for the plan's own CI. M8's `quality` job runs `npm run typecheck` at the repo root, and M3 adds a `typecheck` script to the function manifest. The root `nx run-many -t typecheck` is the only wiring that lets the root command fan out to the function's `tsc --noEmit`; without the root script and its cacheable targetDefault the CI step has nothing to invoke. Adding it now (M1) keeps the scaffolding complete before M3/M8 depend on it.
+  Date/Author: 2026-07-24, cloud-engineer (M1 implementation)
 
 
 ## Outcomes & Retrospective
