@@ -2,12 +2,12 @@ import "dotenv/config";
 import type { HttpFunction } from "@google-cloud/functions-framework";
 import cors from "cors";
 import type * as admin from "firebase-admin";
-import { sendOutreachEmails } from "./lib/email";
 import type { BlastResults } from "./lib/email";
+import { sendOutreachEmails } from "./lib/email";
 import firebase from "./lib/firebase";
-import { outreachRequestSchema } from "./lib/schemas";
-import type { OutreachRequest } from "./lib/schemas";
 import { scanCreators } from "./lib/scanner";
+import type { OutreachRequest } from "./lib/schemas";
+import { outreachRequestSchema } from "./lib/schemas";
 import Sentry from "./lib/sentry";
 
 const corsHandler = cors({ origin: true });

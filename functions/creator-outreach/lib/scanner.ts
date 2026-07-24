@@ -56,8 +56,10 @@ export const matchBatchStudio = (users: Record<string, FirebaseUser>, taskRegion
         if (!user || !user.creator_tasks) return;
 
         const userState =
+            // biome-ignore lint/complexity/useOptionalChain: Firebase shipping_details is untyped at runtime — the && chain returns the falsy operand, whereas ?. would call .toUpperCase() on a non-string falsy value and throw.
             user.shipping_details && user.shipping_details.state && user.shipping_details.state.toUpperCase();
         const userCountry =
+            // biome-ignore lint/complexity/useOptionalChain: see userState above — preserve && semantics for untyped Firebase data.
             user.shipping_details && user.shipping_details.country && user.shipping_details.country.toUpperCase();
 
         const isRegionMatch =
@@ -161,8 +163,7 @@ export const scanCreators = async (firebase: admin.app.App, data: OutreachReques
         lastKey = keys[keys.length - 1];
         if (keys.length < BATCH_SIZE) moreUsers = false;
 
-        const batch =
-            data.product === "studio" ? matchBatchStudio(users, taskRegions) : matchBatchAmplify(users, data);
+        const batch = data.product === "studio" ? matchBatchStudio(users, taskRegions) : matchBatchAmplify(users, data);
 
         matchingCreators = matchingCreators.concat(batch);
     }
