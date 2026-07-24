@@ -1,5 +1,7 @@
 # Bring `creator-outreach` up to `crafted-src` tooling standards
 
+> SUPERSEDED (2026-07-24) by `creator-outreach-modernization.md` in this same directory. This draft chose plain JavaScript with no build step and treated deploy automation as a non-goal; both decisions are reversed in the successor (TypeScript with `tsc --noEmit` in CI, built at deploy via a `gcp-build` script; automated per-branch deploys to three GCP projects with a manual prod promotion). This file is retained for historical context — its GCF constraints (npm-ci-at-deploy, no private workspace dep in the function manifest, import-time side effects, module-private matchers, buildpack dry-run) are still valid and are carried forward into the successor's Surprises & Discoveries. Do not implement from this file.
+
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds. This document follows the ExecPlan format defined in `server/.agent/PLANS.md` (the canonical PLANS.md for this project family).
 
 
