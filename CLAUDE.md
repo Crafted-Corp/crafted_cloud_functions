@@ -63,6 +63,10 @@ const { refreshTiktokAccessTokens } = require("./influencer");
 functions.http("refreshTiktokAccessTokens", refreshTiktokAccessTokens);
 ```
 
+### Function target name = `--entry-point` = deployed name
+
+The string passed to `functions.http(<target>, …)`, the gcloud `--entry-point`, and the deployed Cloud Function name **must be the same string**. A mismatch deploys but fails at cold start with `Function '<name>' is not defined in the provided module`. The canonical name matches the function's **directory**: `creator-outreach` registers `functions.http("creator-outreach", …)`, deploys as `creator-outreach`, and uses `--entry-point=creator-outreach`. The imported handler stays a valid JS identifier (e.g. `creatorOutreach`) — only the registered target string is kebab-case. (Some older functions use camelCase targets like `refreshTiktokAccessTokens`; new functions use their kebab-case directory name.)
+
 ### Wrap all functions with CORS
 ```js
 const cors = require("cors")({ origin: true });

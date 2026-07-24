@@ -40,6 +40,9 @@ const creatorOutreach = (req, res) => {
       // 1. Validate
       const parsed = outreachRequestSchema.safeParse(req.body);
       if (!parsed.success) {
+        console.warn(
+          `creator-outreach: rejected ${req.body?.product ?? "unknown"} request — ${parsed.error.errors.map((e) => e.message).join(", ")}`,
+        );
         return res.status(400).json({
           status: "400",
           statuscode: "-1",
@@ -48,6 +51,13 @@ const creatorOutreach = (req, res) => {
         });
       }
       const data = parsed.data;
+      const target =
+        data.product === "studio"
+          ? `task=${data.task.uid}`
+          : `campaign=${data.campaign_id}`;
+      console.log(
+        `creator-outreach: processing ${data.product} blast (brand=${data.brand_id} ${target})`,
+      );
 
       // 2. Scan
       const matchingCreators = await scanCreators(firebase, data);
@@ -59,6 +69,9 @@ const creatorOutreach = (req, res) => {
       await storeResults(firebase, data, blastResults);
 
       // 5. Respond
+      console.log(
+        `creator-outreach: completed ${data.product} blast (brand=${data.brand_id} ${target}) — matched=${matchingCreators.length} sent=${blastResults.sent} failed=${blastResults.failed}`,
+      );
       return res.status(200).json({
         status: "200",
         statuscode: "1",
