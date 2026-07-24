@@ -12,7 +12,10 @@
         "lint": "biome lint --write .",
         "format": "biome format --write .",
         "check": "biome check --write .",
-        "check:ci": "biome ci ."
+        "check:ci": "biome ci .",
+        "test": "vitest run",
+        "test:ci": "vitest run",
+        "test:watch": "vitest"
     },
     "keywords": [],
     "author": "",
