@@ -1,0 +1,80 @@
+# Production promotion for the creator-outreach Cloud Function.
+# The `prod` GitHub Environment's required-reviewer protection is configured in
+# repo Settings -> Environments -> prod (it cannot be set from this file); the
+# manual run pauses for approval before the deploy-prod job starts. See the
+# "Secrets & Variables Matrix" section of
+# .agent/exec-plans/creator-outreach-modernization.md.
+name: creator-outreach Production Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git SHA or tag to promote to production (defaults to the current main)."
+        required: false
+        default: main
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Materialize prod Firebase Admin key
+        env:
+          FIREBASE_SA_KEY: ${{ secrets.FIREBASE_SA_KEY }}
+        run: |
+          mkdir -p functions/creator-outreach/config
+          printf '%s' "$FIREBASE_SA_KEY" > functions/creator-outreach/config/serviceAccountKey.json
+
+      - name: Write runtime env file
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          cat > env.yaml <<EOF
+          NODE_ENV: "prod"
+          SENDGRID_API_KEY: "${SENDGRID_API_KEY}"
+          SENTRY_DSN: "${SENTRY_DSN}"
+          LOG_EXECUTION_ID: "true"
+          EOF
+
+      - name: Deploy to crafted-v1
+        run: |
+          gcloud functions deploy creator-outreach \
+            --gen2 \
+            --project=${{ vars.GCP_PROJECT }} \
+            --region=${{ vars.GCP_REGION || 'us-central1' }} \
+            --runtime=nodejs22 \
+            --trigger-http \
+            --allow-unauthenticated \
+            --entry-point=creator-outreach \
+            --source=functions/creator-outreach \
+            --env-vars-file=env.yaml \
+            --memory=4Gi --cpu=2 --timeout=3600s --concurrency=1 --max-instances=50
+
+      - name: Print deployed URL
+        run: |
+          gcloud functions describe creator-outreach --gen2 \
+            --region=${{ vars.GCP_REGION || 'us-central1' }} \
+            --project=${{ vars.GCP_PROJECT }} \
+            --format='value(serviceConfig.uri)'
