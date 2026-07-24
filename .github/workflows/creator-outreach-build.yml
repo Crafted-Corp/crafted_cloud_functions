@@ -1,0 +1,81 @@
+name: creator-outreach Build
+
+on:
+  push:
+    paths:
+      - "functions/creator-outreach/**"
+      - "packages/shared-config/**"
+      - "package.json"
+      - "package-lock.json"
+      - "nx.json"
+      - "commitlint.config.js"
+      - ".github/workflows/creator-outreach-build.yml"
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - "functions/creator-outreach/**"
+      - "packages/shared-config/**"
+      - "package.json"
+      - "package-lock.json"
+      - "nx.json"
+      - "commitlint.config.js"
+      - ".github/workflows/creator-outreach-build.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit
+
+      - name: Biome lint + format check
+        run: npm run check:ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:ci
+
+  build-preview:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pack CLI
+        env:
+          PACK_VERSION: 0.40.8
+        run: |
+          curl -sSL "https://github.com/buildpacks/pack/releases/download/v${PACK_VERSION}/pack-v${PACK_VERSION}-linux.tgz" \
+            | sudo tar -C /usr/local/bin --no-same-owner -xzv pack
+          pack version
+
+      - name: Buildpack dry-run (build only, no publish, no cloud credentials)
+        run: |
+          pack build creator-outreach-dryrun \
+            --path functions/creator-outreach \
+            --builder gcr.io/buildpacks/builder:google-22 \
+            --env GOOGLE_FUNCTION_TARGET=creator-outreach \
+            --env GOOGLE_RUNTIME=nodejs22 \
+            --env GOOGLE_NODEJS_VERSION=22
