@@ -79,13 +79,13 @@ the operator during the rollout — they are not run by CI.
 - **Expected result:** Exit 0. Logs show `npm ci` against the nested lockfile, `npm run gcp-build` (`tsc` + template copy), `node --check dist/index.js`, and a successfully built image — no cloud credentials required.
 
 ### TC-co-mod-007
-- **Title:** Push to `dev` auto-deploys to `crafted-dev-v1` and prints the URL
+- **Title:** Push to `dev` auto-deploys `creator-outreach-dev` and prints the URL
 - **Tag:** happy-path
 - **Locale:** n/a
-- **Preconditions:** The `dev` GitHub Environment is configured (secrets/variables + deploy-SA IAM roles).
+- **Preconditions:** The repo-level shared config (`GCP_PROJECT`/`GCP_SA_KEY`/`GCP_REGION` + deploy-SA IAM roles) and the `dev` GitHub Environment's runtime secrets are configured.
 - **Steps:**
   1. Merge the feature branch to `dev` (or push to `dev`).
-- **Expected result:** The `deploy-dev` job runs after `quality` + `build-preview`, deploys `creator-outreach` to `crafted-dev-v1` (Gen2, nodejs22, `us-central1`, `--allow-unauthenticated`, `NODE_ENV=dev`), and the run log prints a `*.run.app` URL.
+- **Expected result:** The `deploy-dev` job runs after `quality` + `build-preview`, deploys the function **`creator-outreach-dev`** into the shared hosting project (Gen2, nodejs22, `us-central1`, `--allow-unauthenticated`, `--entry-point=creator-outreach`, `NODE_ENV=dev`), and the run log prints a `*.run.app` URL.
 
 ### TC-co-mod-008
 - **Title:** Dev endpoint accepts a valid Studio blast (200)
@@ -115,13 +115,13 @@ the operator during the rollout — they are not run by CI.
 - **Expected result:** HTTP 400 with `message: "Validation failed"` and an `errors` array; no scan/email/store runs.
 
 ### TC-co-mod-011
-- **Title:** Merge to `main` auto-deploys to `crafted-staging-v1`
+- **Title:** Merge to `main` auto-deploys `creator-outreach-staging`
 - **Tag:** happy-path
 - **Locale:** n/a
-- **Preconditions:** The `staging` GitHub Environment is configured.
+- **Preconditions:** The `staging` GitHub Environment's runtime secrets are configured (shared repo config already set).
 - **Steps:**
   1. Merge `dev` → `main`.
-- **Expected result:** The `deploy-staging` job deploys to `crafted-staging-v1` (`NODE_ENV=staging`, `stagingServiceAccountKey.json`) and prints the URL. Repeating TC-co-mod-008/009/010 against the staging URL passes.
+- **Expected result:** The `deploy-staging` job deploys the function **`creator-outreach-staging`** into the same shared hosting project (`--entry-point=creator-outreach`, `NODE_ENV=staging`, `stagingServiceAccountKey.json`) and prints the URL. Repeating TC-co-mod-008/009/010 against the staging URL passes.
 
 ### TC-co-mod-012
 - **Title:** Manual prod promotion pauses for the required-reviewer approval
@@ -130,7 +130,7 @@ the operator during the rollout — they are not run by CI.
 - **Preconditions:** The `prod` GitHub Environment is configured with a required reviewer.
 - **Steps:**
   1. Actions → "creator-outreach Production Deploy" → Run workflow (optionally set `ref`) → Run.
-- **Expected result:** The run pauses awaiting approval and does **not** deploy until a reviewer approves. After approval, it deploys the chosen `ref` to `crafted-v1` (`NODE_ENV=prod`, `serviceAccountKey.json`) and prints the URL.
+- **Expected result:** The run pauses awaiting approval and does **not** deploy until a reviewer approves. After approval, it deploys the chosen `ref` as the function **`creator-outreach-prod`** into the shared hosting project (`--entry-point=creator-outreach`, `NODE_ENV=prod`, `serviceAccountKey.json`) and prints the URL.
 
 ### TC-co-mod-013
 - **Title:** Studio path writes `tasks/{uid}/invites`

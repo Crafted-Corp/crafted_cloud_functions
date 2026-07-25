@@ -58,9 +58,9 @@ jobs:
           LOG_EXECUTION_ID: "true"
           EOF
 
-      - name: Deploy to crafted-v1
+      - name: Deploy creator-outreach-prod
         run: |
-          gcloud functions deploy creator-outreach \
+          gcloud functions deploy creator-outreach-prod \
             --gen2 \
             --project=${{ vars.GCP_PROJECT }} \
             --region=${{ vars.GCP_REGION || 'us-central1' }} \
@@ -74,7 +74,7 @@ jobs:
 
       - name: Print deployed URL
         run: |
-          gcloud functions describe creator-outreach --gen2 \
+          gcloud functions describe creator-outreach-prod --gen2 \
             --region=${{ vars.GCP_REGION || 'us-central1' }} \
             --project=${{ vars.GCP_PROJECT }} \
             --format='value(serviceConfig.uri)'

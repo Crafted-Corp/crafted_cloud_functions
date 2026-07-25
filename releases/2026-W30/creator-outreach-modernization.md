@@ -13,9 +13,10 @@
 sends Studio/Amplify outreach emails on behalf of the `server` API — is now the modernization
 **reference** for the `crafted_cloud_functions` repo. It moves from an untooled, plain-JavaScript
 per-directory function to strict TypeScript with Biome, vitest, husky + commitlint, an Nx-driven
-npm workspace, and full CI/CD: PR quality gate + buildpack dry-run, per-branch deploys to three
-GCP projects, and a manual production promotion. The outreach behavior is unchanged; this is a
-tooling/infrastructure modernization. Every other function in `functions/` stays on the legacy
+npm workspace, and full CI/CD: PR quality gate + buildpack dry-run, per-branch deploys of
+`creator-outreach-<env>` into one shared GCP hosting project (env encoded in the deployed function
+name, not the project), and a manual production promotion. The outreach behavior is unchanged; this
+is a tooling/infrastructure modernization. Every other function in `functions/` stays on the legacy
 per-directory JavaScript pattern (future work).
 
 ## What changed
@@ -35,10 +36,12 @@ per-directory JavaScript pattern (future work).
   and **husky + commitlint** (`pre-commit` → lint-staged + tests; `commit-msg` → Conventional
   Commits).
 - **CI/CD** — `.github/workflows/creator-outreach-build.yml` (`quality` = Biome + `tsc --noEmit` +
-  vitest; `build-preview` = `pack build` dry-run; then branch-guarded `deploy-dev` →
-  `crafted-dev-v1` and `deploy-staging` → `crafted-staging-v1`) and
-  `.github/workflows/creator-outreach-deploy-prod.yml` (`workflow_dispatch` → `crafted-v1`, gated
-  by the `prod` Environment's required reviewer).
+  vitest; `build-preview` = `pack build` dry-run; then branch-guarded `deploy-dev` → function
+  `creator-outreach-dev` and `deploy-staging` → function `creator-outreach-staging`) and
+  `.github/workflows/creator-outreach-deploy-prod.yml` (`workflow_dispatch` → function
+  `creator-outreach-prod`, gated by the `prod` Environment's required reviewer). All three deploy
+  into one shared hosting project (repo-level `GCP_PROJECT`); `--entry-point` stays
+  `creator-outreach` in every env.
 - **Docs** — `README.md` gains the creator-outreach infrastructure + manual-deploy sections and a
   corrected folder/function list (no `studioOutreach`); `CLAUDE.md` gains a "Tooling & Standards
   (creator-outreach reference)" section with the TS-build-at-deploy contract and the per-env GCF
@@ -63,26 +66,27 @@ per-directory JavaScript pattern (future work).
 
 Do these in order. Steps 1–2 are one-time platform setup; 3–5 are the rollout dev → staging → prod.
 
-### 0. One-time: GitHub Environments + secrets/variables
+### 0. One-time: shared repo config + GitHub Environments
 
-Configure three GitHub Environments (Settings → Environments): `dev`, `staging`, `prod`. On each,
-set the secrets and variables per the **Secrets & Variables Matrix** in
-`.agent/exec-plans/creator-outreach-modernization.md`:
+Per the **Secrets & Variables Matrix** in `.agent/exec-plans/creator-outreach-modernization.md`:
 
-- **Secrets:** `GCP_SA_KEY` (deploy service-account JSON key, per project), `FIREBASE_SA_KEY`
-  (Firebase Admin SA JSON, materialized into `config/<env>ServiceAccountKey.json`),
+- **Shared repo-level config** (Settings → Secrets and variables → Actions → repository level;
+  one value for all three envs — one hosting project ⇒ one deploy SA ⇒ one region):
+  `GCP_PROJECT` (variable — the single shared **hosting** project id), `GCP_SA_KEY` (secret — JSON
+  key of the one deploy service account), `GCP_REGION` (variable — `us-central1`).
+- **Three GitHub Environments** (Settings → Environments): `dev`, `staging`, `prod`, each holding
+  the **per-env runtime secrets** — `FIREBASE_SA_KEY` (Firebase Admin SA JSON, materialized into
+  `config/<env>ServiceAccountKey.json`; selects the per-env Firebase **data** project),
   `SENDGRID_API_KEY`, `SENTRY_DSN`.
-- **Variables:** `GCP_PROJECT` (`crafted-dev-v1` / `crafted-staging-v1` / `crafted-v1`),
-  `GCP_REGION` (`us-central1`).
 - On the **`prod`** Environment, add the **required-reviewer** protection rule so the manual prod
   deploy pauses for approval.
 
 ### 1. One-time: IAM roles on the deploy service account
 
-Grant the deploy SA behind `GCP_SA_KEY` (per project) the roles the Gen2 build/deploy path needs
-(Cloud Build → Artifact Registry → Cloud Run), per the ExecPlan matrix: **Cloud Functions
-Developer, Cloud Run Admin, Cloud Build Editor, Artifact Registry Writer, Service Account User,
-Storage Object Admin** (gcf source bucket).
+Grant the **single** deploy SA behind the repo-level `GCP_SA_KEY` (in the shared hosting project)
+the roles the Gen2 build/deploy path needs (Cloud Build → Artifact Registry → Cloud Run), per the
+ExecPlan matrix: **Cloud Functions Developer, Cloud Run Admin, Cloud Build Editor, Artifact
+Registry Writer, Service Account User, Storage Object Admin** (gcf source bucket).
 
 > **Org-policy check:** the deploy uses `--allow-unauthenticated`. If an org policy forbids public
 > Cloud Run services, the `allUsers` binding fails the deploy — in that case the auth fast-follow
@@ -91,23 +95,25 @@ Storage Object Admin** (gcf source bucket).
 
 ### 2. Deploy to dev
 
-Push `feature/creator-outreach-modernization` → merge to `dev`. The `deploy-dev` job auto-deploys
-to `crafted-dev-v1` and prints the `*.run.app` URL. Set the server's dev `CF_CREATOR_OUTREACH_URL`
-to that URL. **Verify against the printed URL:**
+Push `feature/creator-outreach-modernization` → merge to `dev`. The `deploy-dev` job deploys the
+function `creator-outreach-dev` into the shared hosting project and prints its `*.run.app` URL. Set
+the server's dev `CF_CREATOR_OUTREACH_URL` to that URL. **Verify against the printed URL:**
 - a valid **Studio** POST → **200**;
 - a valid **Amplify** POST → **200**;
 - an invalid body → **400**.
 
 ### 3. Deploy to staging
 
-Merge `dev` → `main`. The `deploy-staging` job auto-deploys to `crafted-staging-v1` and prints the
-URL. Set the staging `CF_CREATOR_OUTREACH_URL`. Repeat the Studio/Amplify/invalid checks.
+Merge `dev` → `main`. The `deploy-staging` job deploys `creator-outreach-staging` into the same
+shared project and prints the URL. Set the staging `CF_CREATOR_OUTREACH_URL`. Repeat the
+Studio/Amplify/invalid checks.
 
 ### 4. Promote to prod (manual, gated)
 
 Actions → **"creator-outreach Production Deploy"** → **Run workflow** → set `ref` to the SHA/tag
-validated on `main`/staging → **Run**. Approve the required-reviewer prompt. The job deploys to
-`crafted-v1` and prints the URL. Set the prod `CF_CREATOR_OUTREACH_URL`. CLI equivalent:
+validated on `main`/staging → **Run**. Approve the required-reviewer prompt. The job deploys
+`creator-outreach-prod` into the same shared project and prints the URL. Set the prod
+`CF_CREATOR_OUTREACH_URL`. CLI equivalent:
 ```bash
 gh workflow run creator-outreach-deploy-prod.yml --ref main -f ref=<sha-or-tag>
 ```

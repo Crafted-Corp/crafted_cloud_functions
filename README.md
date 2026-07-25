@@ -7,8 +7,9 @@ refresh, campaign analytics, and one-off maintenance scripts).
 Two tooling generations live here side by side:
 
 - **`creator-outreach`** is the **modernization reference**: TypeScript, Biome, vitest, husky +
-  commitlint, an Nx-driven npm workspace, and full CI/CD (per-branch deploys to three GCP
-  projects plus a manual production promotion). Everything below under
+  commitlint, an Nx-driven npm workspace, and full CI/CD (per-branch deploys of
+  `creator-outreach-<env>` into one shared GCP project plus a manual production promotion).
+  Everything below under
   [creator-outreach infrastructure](#creator-outreach-infrastructure) applies only to it.
 - **All other functions** remain on the **legacy per-directory pattern** — each is a standalone
   plain-JavaScript folder with its own `package.json` and `node_modules`, no shared tooling, and
@@ -111,10 +112,14 @@ manual per-environment deploy and the production promotion.
 - **Runtime:** `nodejs22`.
 - **Region:** `us-central1`.
 - **Trigger:** HTTP.
-- **Entry point / target / deployed name:** the single identical string `creator-outreach`
-  (`index.ts` registers `functions.http("creator-outreach", creatorOutreach)`; the gcloud
-  `--entry-point` and the deployed function name are the same string — a mismatch deploys but
-  fails at cold start with `Function '<name>' is not defined in the provided module`).
+- **Entry point / in-code target:** the string `creator-outreach` (`index.ts` registers
+  `functions.http("creator-outreach", creatorOutreach)`; the gcloud `--entry-point` must equal it
+  — a mismatch deploys but fails at cold start with `Function '<name>' is not defined in the
+  provided module`).
+- **Deployed function name:** `creator-outreach-<env>` — `creator-outreach-dev` /
+  `creator-outreach-staging` / `creator-outreach-prod`. All three share **one hosting GCP project**
+  and are isolated by name, so the deployed name carries an env suffix while the `--entry-point`
+  stays `creator-outreach`. Do **not** add the suffix to the in-code `functions.http` target.
 - **Resources:** 2 vCPU, 4Gi memory, concurrency 1, timeout 3600s, max 50 instances.
 - **Runtime service account:** the project's default compute SA
   (`<PROJECT_NUMBER>-compute@developer.gserviceaccount.com`).
@@ -123,22 +128,29 @@ manual per-environment deploy and the production promotion.
 This is the only function on the modern tooling; every other function in `functions/` is still on
 the legacy per-directory JavaScript pattern described above.
 
-## Multi-env layout (3 GCP projects)
+## Multi-env layout (one shared hosting project, env-in-name)
 
-The function is deployed to three separate GCP/Firebase projects, one per environment. The
-branch you push to selects the environment:
+All three environments deploy into a **single shared GCP hosting project** (the repo-level
+`GCP_PROJECT` variable). The environment is encoded in the **deployed function name**, not in the
+project. The branch you push to selects which function name is deployed:
 
-| Environment | Branch / trigger        | GCP project         | `NODE_ENV` |
-|-------------|-------------------------|---------------------|------------|
-| dev         | push to `dev`           | `crafted-dev-v1`    | `dev`      |
-| staging     | push/merge to `main`    | `crafted-staging-v1`| `staging`  |
-| prod        | manual promotion        | `crafted-v1`        | `prod`     |
+| Environment | Branch / trigger     | Deployed function name      | `NODE_ENV` |
+|-------------|----------------------|-----------------------------|------------|
+| dev         | push to `dev`        | `creator-outreach-dev`      | `dev`      |
+| staging     | push/merge to `main` | `creator-outreach-staging`  | `staging`  |
+| prod        | manual promotion     | `creator-outreach-prod`     | `prod`     |
+
+The gcloud `--entry-point` stays `creator-outreach` in every environment (it is the in-code
+`functions.http` target); only the deployed name gets the env suffix, and every deploy passes the
+same shared `--project=$GCP_PROJECT`.
 
 `NODE_ENV` is the single switch that picks the environment at runtime. In
-`functions/creator-outreach/lib/firebase.ts` it selects the Firebase database URL and the service
-account key file it loads (`config/devServiceAccountKey.json` / `config/stagingServiceAccountKey.json`
-/ `config/serviceAccountKey.json`); it also sets the Sentry `environment` tag in `lib/sentry.ts`.
-An unknown `NODE_ENV`, or a missing key file, throws at startup.
+`functions/creator-outreach/lib/firebase.ts` it selects the per-env Firebase **data** project's
+database URL and the service account key file it loads (`config/devServiceAccountKey.json` /
+`config/stagingServiceAccountKey.json` / `config/serviceAccountKey.json`, backed by the Firebase
+data projects `crafted-dev-v1` / `crafted-staging-v1` / `crafted-v1`); it also sets the Sentry
+`environment` tag in `lib/sentry.ts`. An unknown `NODE_ENV`, or a missing key file, throws at
+startup. **Only the function hosting project is shared — the Firebase data projects stay per-env.**
 
 ## CI/CD flow
 
@@ -148,9 +160,11 @@ Two workflow files drive everything:
   `dev`/`staging` deploy jobs.
 - `.github/workflows/creator-outreach-deploy-prod.yml` — the manual production promotion.
 
-There are three GitHub Environments — `dev`, `staging`, and `prod` — that hold the env-scoped
-secrets and variables (and, on `prod`, the required-reviewer protection rule). The full list of
-what each environment needs is the **Secrets & Variables Matrix** in
+The shared deploy config — `GCP_PROJECT` (the one hosting project), `GCP_SA_KEY` (the single
+deploy service-account key), and `GCP_REGION` — is **repo-level** (one hosting project ⇒ one deploy
+SA ⇒ one region). Three GitHub Environments — `dev`, `staging`, and `prod` — hold the **per-env
+runtime secrets** (`FIREBASE_SA_KEY`, `SENDGRID_API_KEY`, `SENTRY_DSN`) and, on `prod`, the
+required-reviewer protection rule. The full list is the **Secrets & Variables Matrix** in
 `.agent/exec-plans/creator-outreach-modernization.md`.
 
 **On a pull request** (to `dev` or `main`), two jobs run and **nothing deploys**:
@@ -160,13 +174,15 @@ what each environment needs is the **Secrets & Variables Matrix** in
   image locally, with no push and no cloud credentials. This is the credential-free proof that the
   TypeScript-build-at-deploy actually works (there is no `--dry-run` on `gcloud functions deploy`).
 
-**On a push to `dev`** the `deploy-dev` job deploys to `crafted-dev-v1`; **on a push/merge to
-`main`** the `deploy-staging` job deploys to `crafted-staging-v1`. Both `need` the `quality` and
-`build-preview` jobs and are branch-guarded, so neither runs on a pull request.
+**On a push to `dev`** the `deploy-dev` job deploys the function `creator-outreach-dev`; **on a
+push/merge to `main`** the `deploy-staging` job deploys `creator-outreach-staging` — both into the
+shared hosting project. Both `need` the `quality` and `build-preview` jobs and are branch-guarded,
+so neither runs on a pull request.
 
 **Production** is intentionally separate: the `creator-outreach-deploy-prod.yml` workflow is
 `workflow_dispatch`-only and runs in the `prod` GitHub Environment, which is configured with a
-**required reviewer** — the run pauses for a human approval before it deploys to `crafted-v1`.
+**required reviewer** — the run pauses for a human approval before it deploys
+`creator-outreach-prod` into the same shared hosting project.
 
 ## TypeScript build-at-deploy mechanism
 
@@ -251,18 +267,21 @@ npm run dev       # builds then starts functions-framework --target=creator-outr
 
 ## Manual deploy (creator-outreach)
 
-These commands are copy-pasteable. Substitute the bracketed values per environment. `gcp-build`
-runs during every `gcloud functions deploy`, so **no local build is required first**.
+These commands are copy-pasteable. All three environments deploy into the **one shared hosting
+project**; the env lives in the function NAME and in `NODE_ENV`. `gcp-build` runs during every
+`gcloud functions deploy`, so **no local build is required first**.
 
 ```bash
 # Prereqs: gcloud authenticated (gcloud auth login); pack is optional, only for a local dry-run.
+# Point at the single shared hosting project (the repo-level GCP_PROJECT value):
+export GCP_PROJECT="<shared-hosting-project-id>"
 
 # 1) Place the matching Firebase Admin key at the path lib/firebase.ts expects:
 #      dev     -> functions/creator-outreach/config/devServiceAccountKey.json
 #      staging -> functions/creator-outreach/config/stagingServiceAccountKey.json
 #      prod    -> functions/creator-outreach/config/serviceAccountKey.json
 
-# 2) Write the runtime env file (NODE_ENV MUST match the target project):
+# 2) Write the runtime env file (NODE_ENV MUST match the deployed function's env):
 cat > env.yaml <<'EOF'
 NODE_ENV: "dev"                 # dev | staging | prod
 SENDGRID_API_KEY: "SG.xxxx"
@@ -270,12 +289,13 @@ SENTRY_DSN: "https://xxxx"
 LOG_EXECUTION_ID: "true"
 EOF
 
-# 3) Deploy. dev is shown; for staging swap --project=crafted-staging-v1 (key stagingServiceAccountKey.json,
-#    NODE_ENV=staging) and for prod swap --project=crafted-v1 (key serviceAccountKey.json, NODE_ENV=prod).
-#    KEEP --allow-unauthenticated — it matches the current deploy posture (see the auth model above).
-gcloud functions deploy creator-outreach \
+# 3) Deploy. dev is shown; for staging use name creator-outreach-staging (key stagingServiceAccountKey.json,
+#    NODE_ENV=staging) and for prod use name creator-outreach-prod (key serviceAccountKey.json, NODE_ENV=prod).
+#    --project ($GCP_PROJECT) and --entry-point (creator-outreach) are the SAME in every env — only the
+#    deployed name and NODE_ENV change. KEEP --allow-unauthenticated (see the auth model above).
+gcloud functions deploy creator-outreach-dev \
   --gen2 \
-  --project=crafted-dev-v1 \
+  --project="$GCP_PROJECT" \
   --region=us-central1 \
   --runtime=nodejs22 \
   --trigger-http \
@@ -286,19 +306,19 @@ gcloud functions deploy creator-outreach \
   --memory=4Gi --cpu=2 --timeout=3600s --concurrency=1 --max-instances=50
 
 # 4) Print the deployed URL (set the server's per-env CF_CREATOR_OUTREACH_URL to it):
-gcloud functions describe creator-outreach --gen2 --region=us-central1 \
-  --project=crafted-dev-v1 --format='value(serviceConfig.uri)'
+gcloud functions describe creator-outreach-dev --gen2 --region=us-central1 \
+  --project="$GCP_PROJECT" --format='value(serviceConfig.uri)'
 ```
 
 ### Manual production promotion (preferred — goes through the approval gate)
 
 Production is promoted through the `workflow_dispatch` workflow so it passes the `prod`
-Environment's required-reviewer gate. Do **not** run a local `gcloud` deploy against `crafted-v1`
-for a normal release.
+Environment's required-reviewer gate. Do **not** run a local `gcloud` deploy of
+`creator-outreach-prod` for a normal release.
 
 - **GitHub UI:** Actions → **"creator-outreach Production Deploy"** → **Run workflow** →
   (optional) set the `ref` input to the git SHA/tag you validated on `main`/staging → **Run**.
-  The run pauses for approval before deploying to `crafted-v1`.
+  The run pauses for approval before deploying `creator-outreach-prod`.
 - **CLI equivalent:**
   ```bash
   gh workflow run creator-outreach-deploy-prod.yml --ref main -f ref=<sha-or-tag>
