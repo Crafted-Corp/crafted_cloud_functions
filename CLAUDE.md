@@ -76,11 +76,13 @@ Full design context: `.agent/exec-plans/creator-outreach-modernization.md`.
   `creator-outreach-staging`) — both into the **single shared hosting project** (repo-level
   `GCP_PROJECT`). `.github/workflows/creator-outreach-deploy-prod.yml` is the `workflow_dispatch`
   prod promotion (function `creator-outreach-prod`), gated by the `prod` GitHub Environment's
-  required reviewer. The shared deploy config (`GCP_PROJECT`, `GCP_SA_KEY`, `GCP_REGION`) is
-  **repo-level** (one hosting project ⇒ one deploy SA); the per-env runtime secrets
-  (`FIREBASE_SA_KEY`, `SENDGRID_API_KEY`, `SENTRY_DSN`) stay in the three GitHub Environments
-  (`dev`/`staging`/`prod`), which also carry the `prod` required-reviewer gate — see the "Secrets &
-  Variables Matrix" in the ExecPlan.
+  required reviewer. The shared deploy config (`GCP_PROJECT`, `GCP_REGION`, `GCP_SA_KEY`) plus the
+  `SENDGRID_API_KEY` and `SENTRY_DSN` runtime secrets are **repo-level** (set once — identical
+  across all envs). The **only per-env secret is `FIREBASE_SA_KEY`** (the dev/staging/prod Firebase
+  data projects genuinely differ); it stays in the three GitHub Environments (`dev`/`staging`/`prod`)
+  along with the `prod` required-reviewer gate. A repo-level `secrets.*` value is still picked up by
+  jobs that declare `environment:` (GitHub precedence is environment → repository) — see the
+  "Secrets & Variables Matrix" in the ExecPlan.
 
 ### TS build-at-deploy contract (do not break)
 

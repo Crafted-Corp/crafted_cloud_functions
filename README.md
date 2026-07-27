@@ -160,11 +160,17 @@ Two workflow files drive everything:
   `dev`/`staging` deploy jobs.
 - `.github/workflows/creator-outreach-deploy-prod.yml` — the manual production promotion.
 
-The shared deploy config — `GCP_PROJECT` (the one hosting project), `GCP_SA_KEY` (the single
-deploy service-account key), and `GCP_REGION` — is **repo-level** (one hosting project ⇒ one deploy
-SA ⇒ one region). Three GitHub Environments — `dev`, `staging`, and `prod` — hold the **per-env
-runtime secrets** (`FIREBASE_SA_KEY`, `SENDGRID_API_KEY`, `SENTRY_DSN`) and, on `prod`, the
-required-reviewer protection rule. The full list is the **Secrets & Variables Matrix** in
+The shared deploy config is **repo-level** (set once): `GCP_PROJECT` (the one hosting project) and
+`GCP_REGION` as variables, plus the `GCP_SA_KEY` (the single deploy service-account key),
+`SENDGRID_API_KEY`, and `SENTRY_DSN` secrets. The two runtime keys live at the repository level
+because they are **identical across all environments** — one SendGrid key and one Sentry DSN serve
+dev, staging, and prod alike (one DSN still separates events by env because `lib/sentry.ts` sets
+Sentry's `environment` from `NODE_ENV`). The **only per-env secret is `FIREBASE_SA_KEY`**, because
+the dev/staging/prod Firebase **data** projects genuinely differ. Three GitHub Environments —
+`dev`, `staging`, and `prod` — hold that `FIREBASE_SA_KEY` and, on `prod`, the required-reviewer
+protection rule. If one env ever needs a different SendGrid/Sentry value, add an environment-level
+secret of the same name — GitHub resolves `secrets.*` as environment → repository, so it overrides
+the repo-level one with no workflow change. The full list is the **Secrets & Variables Matrix** in
 `.agent/exec-plans/creator-outreach-modernization.md`.
 
 **On a pull request** (to `dev` or `main`), two jobs run and **nothing deploys**:

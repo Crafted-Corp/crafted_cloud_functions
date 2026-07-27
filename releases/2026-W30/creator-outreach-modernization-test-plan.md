@@ -82,7 +82,7 @@ the operator during the rollout — they are not run by CI.
 - **Title:** Push to `dev` auto-deploys `creator-outreach-dev` and prints the URL
 - **Tag:** happy-path
 - **Locale:** n/a
-- **Preconditions:** The repo-level shared config (`GCP_PROJECT`/`GCP_SA_KEY`/`GCP_REGION` + deploy-SA IAM roles) and the `dev` GitHub Environment's runtime secrets are configured.
+- **Preconditions:** The repo-level shared config (`GCP_PROJECT`/`GCP_REGION`/`GCP_SA_KEY`/`SENDGRID_API_KEY`/`SENTRY_DSN` + deploy-SA IAM roles) and the `dev` GitHub Environment's `FIREBASE_SA_KEY` (the only per-env secret) are configured.
 - **Steps:**
   1. Merge the feature branch to `dev` (or push to `dev`).
 - **Expected result:** The `deploy-dev` job runs after `quality` + `build-preview`, deploys the function **`creator-outreach-dev`** into the shared hosting project (Gen2, nodejs22, `us-central1`, `--allow-unauthenticated`, `--entry-point=creator-outreach`, `NODE_ENV=dev`), and the run log prints a `*.run.app` URL.
@@ -118,7 +118,7 @@ the operator during the rollout — they are not run by CI.
 - **Title:** Merge to `main` auto-deploys `creator-outreach-staging`
 - **Tag:** happy-path
 - **Locale:** n/a
-- **Preconditions:** The `staging` GitHub Environment's runtime secrets are configured (shared repo config already set).
+- **Preconditions:** The `staging` GitHub Environment's `FIREBASE_SA_KEY` is configured (the shared repo config — including the repo-level `SENDGRID_API_KEY`/`SENTRY_DSN` — is already set).
 - **Steps:**
   1. Merge `dev` → `main`.
 - **Expected result:** The `deploy-staging` job deploys the function **`creator-outreach-staging`** into the same shared hosting project (`--entry-point=creator-outreach`, `NODE_ENV=staging`, `stagingServiceAccountKey.json`) and prints the URL. Repeating TC-co-mod-008/009/010 against the staging URL passes.

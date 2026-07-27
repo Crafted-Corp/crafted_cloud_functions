@@ -71,15 +71,21 @@ Do these in order. Steps 1–2 are one-time platform setup; 3–5 are the rollou
 Per the **Secrets & Variables Matrix** in `.agent/exec-plans/creator-outreach-modernization.md`:
 
 - **Shared repo-level config** (Settings → Secrets and variables → Actions → repository level;
-  one value for all three envs — one hosting project ⇒ one deploy SA ⇒ one region):
-  `GCP_PROJECT` (variable — the single shared **hosting** project id), `GCP_SA_KEY` (secret — JSON
-  key of the one deploy service account), `GCP_REGION` (variable — `us-central1`).
+  one value for all three envs): `GCP_PROJECT` (variable — the single shared **hosting** project
+  id) and `GCP_REGION` (variable — `us-central1`), plus three **secrets** — `GCP_SA_KEY` (JSON key
+  of the one deploy service account), `SENDGRID_API_KEY`, and `SENTRY_DSN`. SendGrid and Sentry are
+  repo-level because they are **identical across all environments** (one DSN still separates events
+  by env — `lib/sentry.ts` sets Sentry's `environment` from `NODE_ENV`).
 - **Three GitHub Environments** (Settings → Environments): `dev`, `staging`, `prod`, each holding
-  the **per-env runtime secrets** — `FIREBASE_SA_KEY` (Firebase Admin SA JSON, materialized into
-  `config/<env>ServiceAccountKey.json`; selects the per-env Firebase **data** project),
-  `SENDGRID_API_KEY`, `SENTRY_DSN`.
+  the **only per-env secret** — `FIREBASE_SA_KEY` (Firebase Admin SA JSON, materialized into
+  `config/<env>ServiceAccountKey.json`; selects the per-env Firebase **data** project, which
+  genuinely differs per env).
 - On the **`prod`** Environment, add the **required-reviewer** protection rule so the manual prod
   deploy pauses for approval.
+- **Escape hatch:** if one env ever needs a different SendGrid/Sentry value, add an
+  environment-level secret of the same name (`SENDGRID_API_KEY` / `SENTRY_DSN`) — GitHub resolves
+  `secrets.*` as environment → repository, so it overrides the repo-level one with no workflow
+  change.
 
 ### 1. One-time: IAM roles on the deploy service account
 
