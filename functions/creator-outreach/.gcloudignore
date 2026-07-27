@@ -4,3 +4,9 @@ node_modules/
 .env
 *.log
 env.yaml
+__tests__/
+*.test.ts
+vitest.config.*
+biome.json
+coverage/
+dist/
