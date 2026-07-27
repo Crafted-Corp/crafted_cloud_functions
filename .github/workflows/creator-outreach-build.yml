@@ -1,0 +1,195 @@
+name: creator-outreach Build
+
+on:
+  push:
+    paths:
+      - "functions/creator-outreach/**"
+      - "packages/shared-config/**"
+      - "package.json"
+      - "package-lock.json"
+      - "nx.json"
+      - "commitlint.config.js"
+      - ".github/workflows/creator-outreach-build.yml"
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - "functions/creator-outreach/**"
+      - "packages/shared-config/**"
+      - "package.json"
+      - "package-lock.json"
+      - "nx.json"
+      - "commitlint.config.js"
+      - ".github/workflows/creator-outreach-build.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit
+
+      - name: Biome lint + format check
+        run: npm run check:ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:ci
+
+  build-preview:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pack CLI
+        env:
+          PACK_VERSION: 0.40.8
+        run: |
+          curl -sSL "https://github.com/buildpacks/pack/releases/download/v${PACK_VERSION}/pack-v${PACK_VERSION}-linux.tgz" \
+            | sudo tar -C /usr/local/bin --no-same-owner -xzv pack
+          pack version
+
+      - name: Buildpack dry-run (build only, no publish, no cloud credentials)
+        run: |
+          pack build creator-outreach-dryrun \
+            --path functions/creator-outreach \
+            --builder gcr.io/buildpacks/builder:google-22 \
+            --env GOOGLE_FUNCTION_TARGET=creator-outreach \
+            --env GOOGLE_RUNTIME=nodejs22 \
+            --env GOOGLE_NODEJS_VERSION=22
+
+  deploy-dev:
+    if: github.ref_name == 'dev'
+    needs: [quality, build-preview]
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Materialize dev Firebase Admin key
+        env:
+          FIREBASE_SA_KEY: ${{ secrets.FIREBASE_SA_KEY }}
+        run: |
+          mkdir -p functions/creator-outreach/config
+          printf '%s' "$FIREBASE_SA_KEY" > functions/creator-outreach/config/devServiceAccountKey.json
+
+      - name: Write runtime env file
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          cat > env.yaml <<EOF
+          NODE_ENV: "dev"
+          SENDGRID_API_KEY: "${SENDGRID_API_KEY}"
+          SENTRY_DSN: "${SENTRY_DSN}"
+          LOG_EXECUTION_ID: "true"
+          EOF
+
+      - name: Deploy creator-outreach-dev
+        run: |
+          gcloud functions deploy creator-outreach-dev \
+            --gen2 \
+            --project=${{ vars.GCP_PROJECT }} \
+            --region=${{ vars.GCP_REGION || 'us-central1' }} \
+            --runtime=nodejs22 \
+            --trigger-http \
+            --allow-unauthenticated \
+            --entry-point=creator-outreach \
+            --source=functions/creator-outreach \
+            --env-vars-file=env.yaml \
+            --memory=4Gi --cpu=2 --timeout=3600s --concurrency=1 --max-instances=50
+
+      - name: Print deployed URL
+        run: |
+          gcloud functions describe creator-outreach-dev --gen2 \
+            --region=${{ vars.GCP_REGION || 'us-central1' }} \
+            --project=${{ vars.GCP_PROJECT }} \
+            --format='value(serviceConfig.uri)'
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main'
+    needs: [quality, build-preview]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Materialize staging Firebase Admin key
+        env:
+          FIREBASE_SA_KEY: ${{ secrets.FIREBASE_SA_KEY }}
+        run: |
+          mkdir -p functions/creator-outreach/config
+          printf '%s' "$FIREBASE_SA_KEY" > functions/creator-outreach/config/stagingServiceAccountKey.json
+
+      - name: Write runtime env file
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          cat > env.yaml <<EOF
+          NODE_ENV: "staging"
+          SENDGRID_API_KEY: "${SENDGRID_API_KEY}"
+          SENTRY_DSN: "${SENTRY_DSN}"
+          LOG_EXECUTION_ID: "true"
+          EOF
+
+      - name: Deploy creator-outreach-staging
+        run: |
+          gcloud functions deploy creator-outreach-staging \
+            --gen2 \
+            --project=${{ vars.GCP_PROJECT }} \
+            --region=${{ vars.GCP_REGION || 'us-central1' }} \
+            --runtime=nodejs22 \
+            --trigger-http \
+            --allow-unauthenticated \
+            --entry-point=creator-outreach \
+            --source=functions/creator-outreach \
+            --env-vars-file=env.yaml \
+            --memory=4Gi --cpu=2 --timeout=3600s --concurrency=1 --max-instances=50
+
+      - name: Print deployed URL
+        run: |
+          gcloud functions describe creator-outreach-staging --gen2 \
+            --region=${{ vars.GCP_REGION || 'us-central1' }} \
+            --project=${{ vars.GCP_PROJECT }} \
+            --format='value(serviceConfig.uri)'

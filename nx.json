@@ -1,0 +1,70 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "targetDefaults": {
+    "clean": {
+      "dependsOn": [
+        "^clean"
+      ],
+      "cache": true
+    },
+    "lint": {
+      "dependsOn": [
+        "^lint"
+      ],
+      "cache": true
+    },
+    "format": {
+      "dependsOn": [
+        "^format"
+      ],
+      "cache": true
+    },
+    "check": {
+      "dependsOn": [
+        "^check"
+      ],
+      "cache": true
+    },
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": true
+    },
+    "test": {
+      "dependsOn": [
+        "^build",
+        "^test"
+      ],
+      "cache": true
+    },
+    "test:integration": {
+      "dependsOn": [
+        "^build",
+        "^test:integration"
+      ],
+      "cache": true
+    },
+    "test:all": {
+      "dependsOn": [
+        "^build",
+        "^test:all"
+      ],
+      "cache": true
+    },
+    "test:ci": {
+      "dependsOn": [
+        "^build",
+        "^test:ci"
+      ],
+      "cache": true
+    },
+    "check:ci": {
+      "cache": true
+    },
+    "typecheck": {
+      "cache": true
+    }
+  },
+  "defaultBase": "dev"
+}

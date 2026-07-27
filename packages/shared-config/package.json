@@ -1,0 +1,20 @@
+{
+    "name": "@crafted/shared-config",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        "./biome": "./biome.json",
+        "./lint-staged": "./lint-staged.mjs"
+    },
+    "license": "ISC",
+    "scripts": {
+        "clean": "rimraf node_modules",
+        "lint": "biome lint --write .",
+        "format": "biome format --write ."
+    },
+    "devDependencies": {
+        "@biomejs/biome": "2.3.15",
+        "typescript": "^5.8.2"
+    }
+}
