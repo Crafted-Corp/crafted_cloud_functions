@@ -87,8 +87,9 @@ Full design context: `.agent/exec-plans/creator-outreach-modernization.md`.
 ### TS build-at-deploy contract (do not break)
 
 GCF Gen2 uploads **TypeScript source** and builds it at deploy: `npm ci` against the standalone
-nested `package-lock.json`, then the `gcp-build` script (`tsc` + copy `templates/*.hbs` into
-`dist/templates/`); `package.json` `"main": "dist/index.js"`. Therefore:
+nested `package-lock.json`, then the `gcp-build` script (`tsc`, copy `templates/*.hbs` into
+`dist/templates/`, and copy any `config/*.json` into `dist/config/`); `package.json`
+`"main": "dist/index.js"`. Therefore:
 
 - `tsconfig.json` is **self-contained** — no `extends` of a workspace path.
 - The function manifest **never** lists `@crafted/shared-config` (or any private workspace pkg).
@@ -98,7 +99,10 @@ nested `package-lock.json`, then the `gcp-build` script (`tsc` + copy `templates
 - The registered target and `--entry-point` are the identical string `creator-outreach` (the
   in-code `functions.http` target); the DEPLOYED name carries an env suffix
   (`creator-outreach-<env>`) because all three environments share one hosting project and are
-  isolated by name. The templates must land under `dist/` or `lib/email.ts` throws at cold start.
+  isolated by name. Both the Handlebars templates (for `lib/email.ts`) and the Firebase key file
+  `config/*.json` (for `lib/firebase.ts`) must be copied under `dist/` by `gcp-build` — each
+  resolves its asset via `__dirname/..`, which is `dist/lib` at runtime — or the module throws at
+  cold start (the container then fails its healthcheck and never listens on PORT 8080).
 
 ### GCF infra (Gen2 / Cloud Run-backed) — per environment
 
