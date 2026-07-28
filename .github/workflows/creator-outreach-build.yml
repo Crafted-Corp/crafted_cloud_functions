@@ -56,6 +56,59 @@ jobs:
       - name: Unit tests
         run: npm run test:ci
 
+  cold-start-smoke:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit
+
+      # A structurally-valid dummy key so lib/firebase.ts's import-time key load
+      # resolves. It must exist BEFORE the build so gcp-build copies it into
+      # dist/config/ (config/ is gitignored — this key is never committed).
+      - name: Generate dummy Firebase service-account key
+        run: |
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/fk.pem
+          mkdir -p functions/creator-outreach/config
+          python3 -c "import json;k=open('/tmp/fk.pem').read();json.dump({'type':'service_account','project_id':'crafted-dev-v1','private_key_id':'ci','private_key':k,'client_email':'ci@crafted-dev-v1.iam.gserviceaccount.com','client_id':'0','token_uri':'https://oauth2.googleapis.com/token'},open('functions/creator-outreach/config/devServiceAccountKey.json','w'))"
+
+      - name: Build (tsc + copy templates/config into dist)
+        run: npm run build
+
+      # Boot the COMPILED function and prove it listens — the guard node --check
+      # can't give (it never executes the module, so it missed the PR #14
+      # import-time Firebase key-path break). The container is UP if curl gets
+      # ANY HTTP response (a 400 on the empty body is healthy validation); the
+      # job fails only if curl cannot connect after the retries, i.e. the module
+      # threw at import and never listened.
+      - name: Boot compiled function and probe :8080
+        working-directory: functions/creator-outreach
+        run: |
+          NODE_ENV=dev SENDGRID_API_KEY=SG.fake npx functions-framework --target=creator-outreach --port=8080 &
+          FF_PID=$!
+          set +e
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --retry-connrefused --retry 20 --retry-delay 1 \
+            -X POST localhost:8080 -H 'Content-Type: application/json' -d '{}')
+          CURL_EXIT=$?
+          set -e
+          echo "HTTP status: ${STATUS} (curl exit ${CURL_EXIT})"
+          kill "$FF_PID" 2>/dev/null || true
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "Function never listened on :8080 — module threw at cold start."
+            exit 1
+          fi
+          echo "Function booted and served an HTTP response — cold start healthy."
+
   build-preview:
     needs: quality
     runs-on: ubuntu-latest
@@ -82,7 +135,7 @@ jobs:
 
   deploy-dev:
     if: github.ref_name == 'dev'
-    needs: [quality, build-preview]
+    needs: [quality, cold-start-smoke, build-preview]
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -139,7 +192,7 @@ jobs:
 
   deploy-staging:
     if: github.ref == 'refs/heads/main'
-    needs: [quality, build-preview]
+    needs: [quality, cold-start-smoke, build-preview]
     runs-on: ubuntu-latest
     environment: staging
     steps:
