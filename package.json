@@ -13,6 +13,7 @@
     "check": "nx run-many -t check",
     "check:ci": "nx run-many -t check:ci --output-style=stream",
     "typecheck": "nx run-many -t typecheck",
+    "build": "nx run-many -t build",
     "test": "nx run-many -t test",
     "test:ci": "nx run-many -t test:ci --output-style=stream",
     "commitlint": "commitlint --edit",
