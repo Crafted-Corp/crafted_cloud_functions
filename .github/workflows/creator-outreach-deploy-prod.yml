@@ -58,6 +58,15 @@ jobs:
           LOG_EXECUTION_ID: "true"
           EOF
 
+      - name: Capture current serving revision
+        id: prev
+        run: |
+          PREV=$(gcloud run services describe creator-outreach-prod \
+            --region=${{ vars.GCP_REGION || 'us-central1' }} \
+            --project=${{ vars.GCP_PROJECT }} \
+            --format='value(status.traffic[0].revisionName)' 2>/dev/null || true)
+          echo "prev_revision=$PREV" >> "$GITHUB_OUTPUT"
+
       - name: Deploy creator-outreach-prod
         run: |
           gcloud functions deploy creator-outreach-prod \
@@ -71,6 +80,26 @@ jobs:
             --source=functions/creator-outreach \
             --env-vars-file=env.yaml \
             --memory=4Gi --cpu=2 --timeout=3600s --concurrency=1 --max-instances=50
+
+      # gen2 functions are Cloud Run services; a failed rollout never shifts
+      # traffic off the last-good revision (a revision that fails its healthcheck
+      # never receives traffic), so prod stays served automatically. This step is
+      # explicit belt-and-suspenders: on a failed deploy, pin traffic back to the
+      # revision that was serving before we started. Skipped on the first-ever
+      # deploy, when no previous revision was captured.
+      - name: Roll back prod traffic on failed deploy
+        if: failure()
+        run: |
+          PREV='${{ steps.prev.outputs.prev_revision }}'
+          if [ -n "$PREV" ]; then
+            echo "Deploy failed — reverting prod traffic to $PREV"
+            gcloud run services update-traffic creator-outreach-prod \
+              --region=${{ vars.GCP_REGION || 'us-central1' }} \
+              --project=${{ vars.GCP_PROJECT }} \
+              --to-revisions="$PREV=100"
+          else
+            echo "No previous revision (first deploy?) — nothing to revert."
+          fi
 
       - name: Print deployed URL
         run: |
