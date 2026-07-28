@@ -114,9 +114,6 @@ export const matchBatchAmplify = (
 
         if (Number.isNaN(followerCount) || followerCount === 0) return;
 
-        // Region match now mirrors Studio via the shared regionMatches: "USA" matches US-country
-        // creators (not the old "USA" = everyone sentinel) and "CAN" matches Canadian-country
-        // creators; any other region matches on shipping_details.state.
         const isRegionMatch = regionMatches(user.shipping_details, states);
 
         // Follower count within range
