@@ -1,4 +1,4 @@
-import { matchBatchAmplify, matchBatchStudio, parseFollowerCount } from "../lib/scanner";
+import { matchBatchAmplify, matchBatchStudio, parseFollowerCount, regionMatches } from "../lib/scanner";
 import type { AmplifyOutreachRequest } from "../lib/schemas";
 
 const amplifyData = (overrides: Partial<AmplifyOutreachRequest> = {}): AmplifyOutreachRequest =>
@@ -77,18 +77,66 @@ describe("matchBatchAmplify", () => {
         expect(matched[0].id).toBe("u1");
     });
 
-    it('treats states === ["USA"] as matching every user regardless of their state', () => {
+    it('matches a US-country creator and excludes a CAN-country creator when states is ["USA"]', () => {
         const users = {
-            anywhere: {
-                email: "a@x.com",
-                shipping_details: { state: "TX" },
+            us: {
+                email: "us@x.com",
+                shipping_details: { country: "USA" },
+                creator_socials: { tiktok: { performance: { followerCount: 5000 } } },
+            },
+            ca: {
+                email: "ca@x.com",
+                shipping_details: { country: "CAN" },
                 creator_socials: { tiktok: { performance: { followerCount: 5000 } } },
             },
         };
 
         const matched = matchBatchAmplify(users, amplifyData({ states: ["USA"] }));
 
-        expect(matched).toHaveLength(1);
+        expect(matched.map((m) => m.id)).toEqual(["us"]);
+    });
+
+    it('matches Canadian-country creators (case-insensitive) and excludes a US creator when states is ["CAN"]', () => {
+        const users = {
+            canUpper: {
+                email: "canupper@x.com",
+                shipping_details: { country: "CAN" },
+                creator_socials: { tiktok: { performance: { followerCount: 5000 } } },
+            },
+            canLower: {
+                email: "canlower@x.com",
+                shipping_details: { country: "can" },
+                creator_socials: { tiktok: { performance: { followerCount: 5000 } } },
+            },
+            us: {
+                email: "us@x.com",
+                shipping_details: { country: "USA" },
+                creator_socials: { tiktok: { performance: { followerCount: 5000 } } },
+            },
+        };
+
+        const matched = matchBatchAmplify(users, amplifyData({ states: ["CAN"] }));
+
+        expect(matched.map((m) => m.id).sort()).toEqual(["canLower", "canUpper"]);
+    });
+
+    it('matches on shipping_details.state for a specific region like ["NY"]', () => {
+        const users = {
+            ny: {
+                email: "ny@x.com",
+                shipping_details: { state: "NY" },
+                creator_socials: { tiktok: { performance: { followerCount: 5000 } } },
+            },
+            ca: {
+                email: "ca@x.com",
+                shipping_details: { state: "CA" },
+                creator_socials: { tiktok: { performance: { followerCount: 5000 } } },
+            },
+        };
+
+        const matched = matchBatchAmplify(users, amplifyData({ states: ["NY"] }));
+
+        expect(matched.map((m) => m.id)).toEqual(["ny"]);
     });
 
     it("skips a user with neither instagram nor tiktok follower count", () => {
@@ -128,6 +176,28 @@ describe("matchBatchAmplify", () => {
         const matched = matchBatchAmplify(users, amplifyData({ follower_count: [1000, 100000], states: ["CA"] }));
 
         expect(matched.map((m) => m.id)).toEqual(["within"]);
+    });
+});
+
+describe("regionMatches", () => {
+    it("matches USA/CAN by country and other regions by state, case-insensitively", () => {
+        expect(regionMatches({ country: "usa" }, ["USA"])).toBe(true);
+        expect(regionMatches({ country: "can" }, ["CAN"])).toBe(true);
+        expect(regionMatches({ state: "ny" }, ["NY"])).toBe(true);
+        expect(regionMatches({ country: "USA" }, ["CAN"])).toBe(false);
+        expect(regionMatches({ state: "NY" }, ["CA"])).toBe(false);
+    });
+
+    it("returns a real boolean (not the falsy operand of the && chain)", () => {
+        expect(regionMatches(undefined, ["USA"])).toBe(false);
+        expect(regionMatches({}, ["NY"])).toBe(false);
+    });
+
+    it("does not throw when shipping fields are non-string falsy values (untyped Firebase data)", () => {
+        const shipping = { state: 0, country: 0 } as unknown as Parameters<typeof regionMatches>[0];
+
+        expect(() => regionMatches(shipping, ["NY", "USA"])).not.toThrow();
+        expect(regionMatches(shipping, ["NY", "USA"])).toBe(false);
     });
 });
 

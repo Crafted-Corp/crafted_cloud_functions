@@ -49,25 +49,29 @@ export interface MatchedCreator {
     creator_socials?: CreatorSocials;
 }
 
+// USA/CAN are country-level regions (matched against shipping.country); anything else is a state code.
+export const regionMatches = (shipping: ShippingDetails | undefined, regions: string[]): boolean => {
+    const state =
+        // biome-ignore lint/complexity/useOptionalChain: Firebase shipping_details is untyped at runtime — the && chain returns the falsy operand, whereas ?. would call .toUpperCase() on a non-string falsy value and throw.
+        shipping && shipping.state && shipping.state.toUpperCase();
+    const country =
+        // biome-ignore lint/complexity/useOptionalChain: see state above — preserve && semantics for untyped Firebase data.
+        shipping && shipping.country && shipping.country.toUpperCase();
+
+    return Boolean(
+        (regions.includes("USA") && country === "USA") ||
+            (regions.includes("CAN") && country === "CAN") ||
+            (state && regions.includes(state)),
+    );
+};
+
 export const matchBatchStudio = (users: Record<string, FirebaseUser>, taskRegions: string[]): MatchedCreator[] => {
     const matched: MatchedCreator[] = [];
 
     Object.entries(users).forEach(([key, user]) => {
         if (!user || !user.creator_tasks) return;
 
-        const userState =
-            // biome-ignore lint/complexity/useOptionalChain: Firebase shipping_details is untyped at runtime — the && chain returns the falsy operand, whereas ?. would call .toUpperCase() on a non-string falsy value and throw.
-            user.shipping_details && user.shipping_details.state && user.shipping_details.state.toUpperCase();
-        const userCountry =
-            // biome-ignore lint/complexity/useOptionalChain: see userState above — preserve && semantics for untyped Firebase data.
-            user.shipping_details && user.shipping_details.country && user.shipping_details.country.toUpperCase();
-
-        const isRegionMatch =
-            (taskRegions.includes("USA") && userCountry === "USA") ||
-            (taskRegions.includes("CAN") && userCountry === "CAN") ||
-            (userState && taskRegions.includes(userState));
-
-        if (isRegionMatch) {
+        if (regionMatches(user.shipping_details, taskRegions)) {
             matched.push({
                 // paypail_email is the real field name in Firebase (not a typo in code)
                 email: user.email || user.paypail_email,
@@ -110,13 +114,7 @@ export const matchBatchAmplify = (
 
         if (Number.isNaN(followerCount) || followerCount === 0) return;
 
-        // State match: "USA" matches all users; otherwise must match exactly
-        const influencerState = user?.shipping_details?.state;
-        const isStateMatch =
-            (states.length === 1 && states[0] === "USA") ||
-            // influencerState may be undefined; Array.includes handles that (returns false) —
-            // the cast only satisfies the string[] element type without changing behavior.
-            states.includes(influencerState as string);
+        const isRegionMatch = regionMatches(user.shipping_details, states);
 
         // Follower count within range
         const isFollowerMatch = followerCount >= minFollowerCount && followerCount <= maxFollowerCount;
@@ -124,7 +122,7 @@ export const matchBatchAmplify = (
         // At least one platform present in creator_socials
         const isPlatformMatch = platforms.some((p) => Boolean(user?.creator_socials?.[p]));
 
-        if (isStateMatch && isFollowerMatch && isPlatformMatch) {
+        if (isRegionMatch && isFollowerMatch && isPlatformMatch) {
             matched.push({
                 creator_socials: user.creator_socials,
                 email: user.email,
