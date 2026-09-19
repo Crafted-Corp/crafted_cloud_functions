@@ -5,6 +5,17 @@ Read this before making any changes.
 
 ---
 
+## The `crafted` Claude Code plugin
+
+This repo is one of four in the Crafted engineering workspace (`server`, `client`, `crafted-src`, `crafted_cloud_functions`) and is meant to be worked on through the `crafted` Claude Code plugin:
+
+    /plugin marketplace add Crafted-Corp/crafted-plugin
+    /plugin install crafted@crafted
+
+It provides the specialist agent pipeline (`crafted:backend-engineer`, `crafted:frontend-engineer`, `crafted:cloud-engineer`, `crafted:product-owner`, `crafted:tech-lead`), the ExecPlan doctrine (`crafted:exec-plan`), the comment policy and its audit (`crafted:comment-policy`, `crafted:audit-comments`), PRD/TRD/feature-delivery/Sentry-triage skills, and the worktree/data/log tooling referenced throughout this file. See the plugin's own README for setup (credentials, per-repo `.env`, required CLI tools).
+
+---
+
 ## Branch Flow
 ```
 dev → main
