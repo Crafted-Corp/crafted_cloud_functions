@@ -16,6 +16,12 @@ It provides the specialist agent pipeline (`crafted:backend-engineer`, `crafted:
 
 ---
 
+## ExecPlans
+
+For complex features, write an ExecPlan before implementation. The full doctrine — requirements, formatting, milestones, living-document rules, the skeleton — lives in the `crafted` plugin's `exec-plan` skill; read `${CLAUDE_PLUGIN_ROOT}/skills/exec-plan/references/PLANS.md` in full before authoring or revising a plan, and follow it to the letter. Store plans themselves in `.agent/exec-plans/`, one per feature.
+
+---
+
 ## Branch Flow
 ```
 dev → main
