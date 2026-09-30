@@ -7,7 +7,13 @@ Read this before making any changes.
 
 ## ExecPlans
 
-When writing plans, use an ExecPlan (as described in `.agent/PLANS.md`) from design to implementation. Store ExecPlans under `.agent/exec-plans/` before any implementation.
+When writing plans, use an ExecPlan (as described in `.agent/PLANS.md`) and reuse settled PRD/TRD decisions. Store ExecPlans under `.agent/exec-plans/` before implementation.
+
+Use `crafted:delivery-pipeline` for code delivery: assigned specialists, required checks, one
+combined tech-lead review, focused corrections, plan updates, and PRs. Product validation, tester,
+manual test authoring, audits, issues, and release notes are selected separately. Deployment
+prerequisites still belong in the README. Reuse matching verification evidence rather than rerunning
+unchanged checks at every milestone.
 
 ---
 
