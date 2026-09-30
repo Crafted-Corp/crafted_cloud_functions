@@ -122,7 +122,7 @@ npm run build          # tsc + copy templates/ & config/ into dist/ (gcp-build r
 
 ## Specialist workflow
 
-The five canonical specialist role documents live in `crafted-plugin/plugins/crafted/agents/`. Delegate to the appropriate role; do not bypass the role boundaries when one applies.
+The seven canonical specialist role documents live in `crafted-plugin/plugins/crafted/agents/`. The `delivery-pipeline` skill owns code delivery; `feature-delivery` is its compatibility alias. Delegate implementation to the appropriate role.
 
 | Role | Claude Code invocation | Codex custom subagent |
 |------|------------------------|-----------------------|
@@ -131,11 +131,17 @@ The five canonical specialist role documents live in `crafted-plugin/plugins/cra
 | cloud engineer | `crafted:cloud-engineer` | `crafted_cloud_engineer` |
 | product owner | `crafted:product-owner` | `crafted_product_owner` |
 | tech lead | `crafted:tech-lead` | `crafted_tech_lead` |
+| code explorer (read-only) | `crafted:code-explorer` | `crafted_code_explorer` |
+| test engineer (when testing is selected) | `crafted:test-engineer` | `crafted_test_engineer` |
 
 **Rules:**
 - For single-layer frontend, backend, or infrastructure work, delegate directly to the matching specialist.
 - For multi-layer work, have the tech lead assess and coordinate specialists first.
-- Before declaring implementation done, have the product owner validate acceptance criteria, evidence, edge cases, and regression risk.
+- Finish code delivery with required checks, one tech-lead review of the full combined diff, targeted corrections, updated ExecPlan evidence, and PRs. Re-review corrected areas and their affected boundaries; repeat a whole review only for a concrete unresolved risk.
+- Product validation, tester, manual-test-plan, audit-comments, audit-pr, ticket creation, and release notes are selected separately. They are not automatic delivery phases. Necessary migration and environment instructions still belong in the relevant README.
+- Give builders explicit file ownership, acceptance criteria, required checks, existing evidence, and the comment-policy summary once. Reuse the assigned specialists across milestones. They do not start independent reviewer chains.
+- Builder completion rule: **Complete the assigned implementation and required checks, then return the result. Additional review rounds require a concrete unresolved defect or an explicit request. Do not spawn reviewers independently.**
+- Model and effort assignments are defined in `crafted-plugin/plugins/crafted/scripts/lib/model-policy.ts` and checked against the canonical Claude role metadata; Codex definitions are generated. Preserve explicit assignments and report unsupported models instead of silently substituting them.
 - Claude Code has no bare-name fallback: use only the `crafted:` names. Codex uses the generated project-scoped custom-agent names above and should be explicitly asked to spawn them.
 
 
@@ -157,11 +163,12 @@ The five canonical specialist role documents live in `crafted-plugin/plugins/cra
 - **Never create worktrees inside the sub-project directories** (e.g., `client/.worktrees/`). Always use the root-level `.worktrees/` folder via absolute path.
 - When an agent finishes, it reports the worktree path and branch name. **Do not copy files back to the main tree.** Instead, review the branch diff and merge when ready.
 - If a task spans multiple repos (e.g., `client/` + `server/`), each gets its own worktree and branch.
-- After creating a worktree, copy the `.env` file from the main tree (e.g., `cp client/.env .worktrees/fix/<name>-client/.env`) and run `npm install` — worktrees do not share `node_modules` or env files with the main tree.
+- Assign exclusive ownership of files in a shared session worktree. Serialize overlapping edits, git operations, dependency changes, and checks that require a stable integrated tree. Never undo another agent's edits.
+- Copy required environment files privately. Reuse `node_modules` only when lockfiles and runtime match; install separately when they differ. Do not install packages through a shared dependency symlink.
 - **Tooling:** Set `CRAFTED_ROOT=/home/gustavo/dev/crafted` and `CRAFTED_PLUGIN="$CRAFTED_ROOT/crafted-plugin/plugins/crafted"`, then run `"$CRAFTED_PLUGIN/scripts/wt-new" --repo <client|server|crafted-src> --type <feature|fix|bugfix|hotfix> --name <slug>`. It creates the worktree from the correct base (crafted-src→`dev`, server→`master-dev`, client→`main-dev`), copies `.env`, and symlinks matching `node_modules`; `--real-install` forces an isolated install and `--no-install` skips it. `"$CRAFTED_PLUGIN/scripts/wt-clean"` removes a worktree (and optionally its merged branch), refuses base branches and dirty trees without `--force`, and leaves the branch unless `--delete-branch` is passed. Never run `rm -rf <worktree>/node_modules/` with a trailing slash: it follows the shared link. `wt-new` does not cover `crafted_cloud_functions`; create that worktree manually from `origin/dev`, then copy `.env` and install or link `node_modules`.
 
 **Surgical-fix lane:**
-- A trivial, fully-diagnosed fix may skip the full `tech-lead → specialist → product-owner` pipeline and be implemented directly — but **only when every one** of these holds: (1) the change is a single file or a tightly-scoped handful of lines; (2) the root cause is **proven** (reproduced against dev, not guessed — `feedback_verify_before_asserting`, `feedback_test_against_dev_not_prod`); (3) no cross-layer impact; (4) no schema, public API, or dependency change; (5) a regression test covering the bug is added.
+- A trivial, fully-diagnosed fix may use a short brief and direct implementation — but **only when every one** of these holds: (1) the change is a single file or a tightly-scoped handful of lines; (2) the root cause is **proven** (reproduced locally or against dev, not guessed); (3) no cross-layer impact; (4) no schema, public API, or dependency change; (5) a regression test covering the bug is added. It still receives one final technical review.
 - This **refines, not replaces** the pipeline: the fix still happens in a dedicated worktree (normally `"$CRAFTED_PLUGIN/scripts/wt-new"`), still commits and opens a PR, and still runs the repo's lint/type/test. If any criterion is in doubt, fall back to the full pipeline — anything multi-file, cross-layer, or architectural always goes through `tech-lead` first.
 
 ## Comments
@@ -181,7 +188,7 @@ The five canonical specialist role documents live in `crafted-plugin/plugins/cra
   first. This governs the whole change, not one block — the usual shape is a constraint restated in
   a schema, the service that enforces it, the controller that calls it and the client that sends to
   it, which is four places to update and three chances to miss one.
-- **Audit before handing work back — `audit-comments`.** Run the `audit-comments` skill, which invokes `node "$CRAFTED_PLUGIN/scripts/comment-audit.ts" <base-ref>` for the two countable rules (every block over the ceiling and the comment-to-code ratio per changed file), then read the flagged files. Whether a comment restates its code is not a thing a script can decide; a rule enforced only by the judgement that wrote the comment is not enforced.
+- **Apply the policy while writing and reviewing.** The initial builder prompt carries the compact `comment-policy` summary. The separate `audit-comments` skill is available when selected; it is not a required delivery step. Its countable checks supplement reading the comments, because a script cannot judge whether a comment restates the code.
 - **No commented-out code.** Delete it — git has the history.
 - **Keep comments in sync.** When editing, update or delete stale comments rather than leaving them contradicting the code.
 - **Reference a doc only when the comment can't carry the context itself.** A doc reference is an escape hatch for context too large to inline — not a citation reflex. Default to a self-contained comment that explains the *why*; add a reference only when the missing context is genuinely large enough to belong in a doc rather than the comment. If the comment already explains enough on its own, add **no** reference — never decorate an already-sufficient comment with a tacked-on `(D11)`, `(see ExecPlan … M9)`, or `(§4.8)`. Over-citing is noise that rots.
@@ -192,14 +199,17 @@ The five canonical specialist role documents live in `crafted-plugin/plugins/cra
 
 ## Cross-Cutting Notes
 
+- **`server/` layering and naming** (what a controller file may hold, where services and utils go, how new controllers and services are named, and the rule that nothing below a controller receives `req`) live in `server/CLAUDE.md` *Layering and naming* and the crafted plugin's ruling R12 (`crafted-plugin/plugins/crafted/skills/pr-rules/references/rulings.md`).
 - **Firebase Auth** is used across all three projects but with different configurations. The legacy stack uses one Firebase project; Convert AI uses two separate Firebase projects (enrollees vs. admins).
 - **Data warehouse architecture:** `server/` reporting endpoints query **Athena views** built by dbt in `crafted-src/analytics/dbt/crafted_dw/models/`. Never embed multi-table join logic in `server/` service methods — the dbt layer owns all data transformation. When adding a new reporting endpoint to `server/`, build the dbt view first.
 - **Email delivery service (all repos):** A queue-fronted, business-agnostic mail service owns SendGrid delivery: `server/` produces envelopes through `MailService.enqueue()` (`services/base/MailService.ts`), and `crafted-src/apps/mail-delivery-service` + `apps/mail-delivery-deployer` run the **delivery worker Lambda** and its AWS stack. **The return path is the caller's:** `server/` owns one shared endpoint receiving SendGrid's account-level Event Webhook for every category and sender (v0.8 ruling — the service no longer receives events), so a new feature never builds its own webhook and reads status through `MailStatusReader`. **Any new feature that sends email uses `enqueue()` — never a new nodemailer/`sgMail`/raw-HTTPS transport** (a ratchet test in `server/__tests__/unit/architecture/` fails CI on one). The ~38 legacy send sites adopt progressively, one site per scoped change, following the playbook in §14 of `trds/TRD-email-delivery-service.md`; per-category templates live in `server/mailTemplates/` with a checked-in registry. Design of record: `trds/TRD-email-delivery-service.md` (v0.8; Notion mirror page `3d02155d-3b7d-8115-939e-e0ef2e79a267`).
 - **Mixpanel analytics (`client/`):** The `Mixpanel` export from `src/mixpanel.js` is a named-method object (e.g. `Mixpanel.rebatePageViewed()`), **not** a generic `track` wrapper. For analytics in Brand Dashboard components, use `trackConvertEvent(eventName, properties, uid, email)` from the `useAnalytics()` hook — this matches the established pattern in `Sidebar.js` and all Convert-area page components.
-- **ExecPlans**: For complex features in `crafted-src/`, `client/`, `server/`, or `crafted_cloud_functions/`, write a design doc before implementing. First read that repo's self-contained `.agent/PLANS.md` in full; the `crafted` plugin's `exec-plan` skill carries the canonical duplicate (and the client copy also holds a `## Plan Index`). Store plans in that repo's `.agent/exec-plans/`.
+- **ExecPlans**: For complex features, read the `exec-plan` skill and the repo's `.agent/PLANS.md` before implementing. Store implementation plans in `.agent/exec-plans/`; reuse settled PRD/TRD decisions. Cross-repo work designates one authoritative shared contract and links to it. Update progress, decisions, check evidence, and remaining work without creating a second design review.
 - **TRD/PRD docs (`/trds/`)**: The on-disk copy under `/home/gustavo/dev/crafted/trds/` is the **working source of truth** for TRDs/PRDs; the Notion page is downstream. After bumping a doc's version on disk, re-sync it to its Notion page with the `sync-doc-to-notion` skill so the two don't drift. (Because `/trds/` docs live outside the repos, a code comment citing one must carry the Notion link — see `## Comments`.)
-- **Release Notes**: After completing a feature, write release notes **in the feature's own repo** at `<repo>/releases/<YYYY>-W<WW>/<feature-slug>.md` (crafted-src → `crafted-src/releases/`, server → `server/releases/`, client → `client/releases/`, crafted_cloud_functions → `crafted_cloud_functions/releases/`; ISO week of completion, one file per feature) and commit them in the feature's PR — so they are versioned and ship with the code. Each entry should include: area, summary, what changed, results, and a **deploy checklist** — the manual steps to ship, listed per environment (dev → staging → prod): migrations (`migration:run`), secrets to set, `dbt run` / `run-operation`, `pulumi up`, and any backfill or export-lag wait, in order. (The workspace-root `releases/` holds older notes but is **not** in any git repo; go-forward notes live in-repo.)
-- **Manual test suite**: Every feature ships a manual test suite **in its repo** at `<repo>/releases/<YYYY>-W<WW>/<feature-slug>-test-plan.md` (same per-stack roots as Release Notes), committed in the feature's PR and authored as the final phase of the `feature-delivery` skill (or standalone). Copy the template bundled with the `crafted` plugin's `feature-delivery` skill; each case carries a stable ID, preconditions, numbered steps, an expected result, a tag (happy-path / edge / regression), and locale coverage — localized `(retail)` UI cases are run in both `en` and `es`.
+- **Release Notes**: Create release notes only when explicitly requested, in the feature's repo at `releases/<YYYY>-W<WW>/<feature-slug>.md`. Automatic code delivery does not create them. Always document necessary migration, configuration, and deployment steps in the owning README.
+- **Manual test suite**: When selected, `manual-test-plan` owns one suite per feature at `.agent/test-plans/<feature-slug>.md` in a designated owner repo. Companion repos link to it. Each case has a stable ID, preconditions, numbered steps, expected result, a happy-path/edge/regression tag, and locale coverage (`en` and `es` for localized retail UI). `tester` reuses that suite.
+- **Verification effort**: Run focused checks during implementation and required final gates once on the integrated result, or reuse matching CI evidence. Evidence includes code contents (including dirty changes), command, dependency/runtime identity, environment and schema identity, outcome, and measured duration. Unknown or changed inputs invalidate reuse. Measure a baseline when it resolves a concrete regression question; select mutation probes for important invariants rather than every guard. After two unsuccessful attempts at the same blocker, report it and change approach while completing independent work.
+- **Local Supabase sessions**: The server's coordinated runner owns stack selection, locking, and isolated CLI configuration. Share compatible sessions; serialize schema changes and mutating tests. Use independent session IDs and ports for incompatible work. Never reset or stop a stack owned by another session. See `server/README.md` for the supported commands.
 - **Sanitized fixtures**: When a real failing input (a webhook envelope, request body, or DB row) pins a bug, persist a **sanitized** copy — no secrets, tokens, or PII — as a test fixture for the regression test. Never commit a raw production payload. (This is how the Google Wallet callback `expTimeMillis` bug was pinned from the real envelope.)
 - **Memory hygiene**: Keep each `MEMORY.md` pointer to one line. When a `project_*` memory grows past a few dense paragraphs of saga history, consolidate it down to current state + open follow-ups — git history and PRs hold the narrative; the memory should hold what's still actionable.
 - **Plugin and script path:** In a shell, set `CRAFTED_ROOT=/home/gustavo/dev/crafted` and `CRAFTED_PLUGIN="$CRAFTED_ROOT/crafted-plugin/plugins/crafted"`. Run shared scripts from `$CRAFTED_PLUGIN/scripts/` (for example, `"$CRAFTED_PLUGIN/scripts/wt-new"`). `${CLAUDE_PLUGIN_ROOT}` is a Claude Code-only placeholder in canonical skill and role text; Codex resolves it as `$CRAFTED_PLUGIN`, never as a literal shell variable.
@@ -219,7 +229,13 @@ Read this before making any changes.
 
 ## ExecPlans
 
-When writing plans, use an ExecPlan (as described in `.agent/PLANS.md`) from design to implementation. Store ExecPlans under `.agent/exec-plans/` before any implementation.
+When writing plans, use an ExecPlan (as described in `.agent/PLANS.md`) and reuse settled PRD/TRD decisions. Store ExecPlans under `.agent/exec-plans/` before implementation.
+
+Use `crafted:delivery-pipeline` for code delivery: assigned specialists, required checks, one
+combined tech-lead review, focused corrections, plan updates, and PRs. Product validation, tester,
+manual test authoring, audits, issues, and release notes are selected separately. Deployment
+prerequisites still belong in the README. Reuse matching verification evidence rather than rerunning
+unchanged checks at every milestone.
 
 ---
 
