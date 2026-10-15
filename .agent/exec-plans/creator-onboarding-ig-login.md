@@ -47,7 +47,7 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 ## Progress
 
 - [x] (2026-10-15) TRD v1.0 FINAL read in full; the function facts the TRD cites re-verified in this worktree at `2c5193d` (see `Surprises & Discoveries`).
-- [x] (2026-10-15) Plan authored; subsequently approved for implementation. M0 (the N18 hotfix) is being implemented in the client worktree by a frontend engineer and touches nothing here.
+- [x] (2026-10-15) Plan authored; subsequently approved for implementation. M0 (the N18 hotfix) merged as client PR #573 on 2026-10-15 and touches nothing here.
 - [x] (2026-10-15) Before the first edit: `git fetch origin`, `git ls-remote --heads origin feature/creator-onboarding-ig-login`, `gh pr list --state all --head feature/creator-onboarding-ig-login`; `gcloud functions describe` for each of the six functions in the dev data project to record region, entry point, runtime and env (names only), since the legacy deploy procedure is not documented in this repository (see `Surprises & Discoveries`).
 - [ ] P5 (operator, user-authorized) — rotate the committed TikTok client secret in the TikTok developer console; set `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` on the `refreshTiktokAccessTokens` function env per data project. The old secret is dead the moment the new one is issued, so this step and the M3-fn deploy of `refreshTokens` happen in one sitting.
 - [x] (2026-10-15) P13 (OS2 probe) — count dev creators with `creator_socials/tiktok/access_token` present (read-only shallow scan); record the number as the batch-size basis.
@@ -123,7 +123,7 @@ Work starts on the defaults; "all defaults stand" is a complete answer. None blo
 Functions PR A outcome: implements all three M3-fn milestones: atomic rotated TikTok tokens, awaited key-paged TikTok rates, and Instagram reconnect-error persistence with rate-limit suppression. Six syntax checks, strict TypeScript verification of the standalone regression file, five deterministic tests, all four required root gates, and scoped dev Firebase write/readback passed. Real-vendor F-FN remains unverified until P5 and operator deployment. PR #24 is open with combined technical review GO. No rotation or deployment was performed; M5-fn is carried only by B.
 
 
-Functions PR B code/check outcome: M5-fn.1/.2 are implemented in the stacked B worktree with host selection in all four Instagram data jobs and the Instagram token refresher. Demographics has isolated scoped reads and atomic reconnect-error handling; comments/campaign scopes are retained. Analytics uses a per-invocation creator cache rather than a process-global cache. Thirteen isolated Node tests, a strict standalone TypeScript check, twelve syntax checks and all four root gates passed. No deployed function was invoked, no additional live Firebase probe was needed, and no secret was rotated. Live Meta routing/refresh remains unverified pending P3/P4 and a permitted operator data target. The next delivery step is one combined B technical review and PR publication against A’s branch.
+Functions PR B code/check outcome: M5-fn.1/.2 are implemented in the stacked B worktree with host selection in all four Instagram data jobs and the Instagram token refresher. Demographics has isolated scoped reads and atomic reconnect-error handling; comments/campaign scopes are retained. Analytics uses a per-invocation creator cache rather than a process-global cache. Thirteen isolated Node tests, a strict standalone TypeScript check, twelve syntax checks and all four root gates passed. No deployed function was invoked, no additional live Firebase probe was needed, and no secret was rotated. Live Meta routing/refresh remains unverified pending P3/P4 and a permitted operator data target. The combined B technical review returned GO at ceaa4aef6f559903fd9fb296f764152e51f79c5f against A ddb9f31; the remaining delivery step is PR publication against A’s branch. The review requested only documentation updates for merged client PR #573 and the newly approved Server P/password-backfill prerequisite before Client 2; those are applied without changing verified code inputs.
 
 
 ## Context and Orientation
@@ -341,3 +341,8 @@ Recorded the user's stacked-PR authorization, new isolated Functions B worktree/
 ## Revision note 7 — 2026-10-15, Cloud Engineer
 
 Implemented host routing, scoped demographics/error updates, per-invocation analytics creator caching, and Instagram long-lived refresh while preserving A’s TikTok behavior. Updated progress, outcomes, decisions, README deployment facts/guards and measured check identities. PR B is prepared as authorized stacking; no deployment or real-vendor verification is claimed.
+
+
+## Revision note 8 — 2026-10-15, orchestrator
+
+Recorded the combined Functions B technical GO, marked client M0/#573 merged, and updated README rollout instructions for the user-approved Server P prerequisite and password backfill before Client 2. The guards against invoking production-backed dev deployments remain unchanged. These are documentation-only review corrections; the recorded runtime check inputs are unchanged.

@@ -412,8 +412,10 @@ analytics retain their existing `?campaign_id=<id>` scopes. These scopes do not
 authorize invoking a deployment whose data target is production.
 
 Deploy in the approved order per environment: Functions A, Supabase migration,
-Server A, Client 2, then Server C after Client 2 is live. Later, Functions B precedes
-Server B and Client 3 with Instagram Login flags off; dev flag enablement/backfills,
+Server A, then the Server P prerequisite (verified password/email endpoints and
+its migration). Provision the auth-project key and run the password login-method
+backfill before Client 2. Server C follows only after Client 2 is live. Later,
+Functions B precedes Server B and Client 3 with Instagram Login flags off; dev flag enablement/backfills,
 Meta review, staging and production follow. In B, deploy campaign analytics last,
 after sanctioned scoped validation against an explicitly verified data target.
 Functions B routes rates, demographics, comments and campaign insights through
