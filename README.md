@@ -407,15 +407,48 @@ TikTok-rate and Instagram-rate handlers. Reads of the resulting platform node mu
 show rotated tokens, both expiries, `updated`/`updated_at`, and cleared `last_error`
 after success. A synthetic vendor response verifies storage and response ordering;
 real TikTok rotation requires two successful real-vendor runs after P5.
-`updateInstagramDemographics` and comments gain scopes in Functions PR B;
-`refreshAllCampaignAnalytics` already accepts `?campaign_id=<id>`.
+Functions PR B adds `?user_id=<uid>` to demographics. Comments and campaign
+analytics retain their existing `?campaign_id=<id>` scopes. These scopes do not
+authorize invoking a deployment whose data target is production.
 
 Deploy in the approved order per environment: Functions A, Supabase migration,
 Server A, Client 2, then Server C after Client 2 is live. Later, Functions B precedes
 Server B and Client 3 with Instagram Login flags off; dev flag enablement/backfills,
 Meta review, staging and production follow. In B, deploy campaign analytics last,
 after sanctioned scoped validation against an explicitly verified data target.
-Instagram host routing is B work; A retains the Facebook host.
+Functions B routes rates, demographics, comments and campaign insights through
+`graphHostFor`: `api_path: "instagram"` uses `graph.instagram.com/v24.0`; absent
+or Facebook paths retain `graph.facebook.com/v24.0`. The five helper copies must
+stay identical because each legacy folder is uploaded independently. Instagram
+account reads use `instagram_user_id` on the Instagram path and
+`instagram_business_account_id` on the Facebook path. Campaign analytics caches
+the creator's Instagram node once per HTTP invocation, including across campaigns;
+it rereads the node on the next invocation.
+
+The existing `refreshTiktokAccessTokens` entry point now refreshes both platforms.
+TikTok refresh keeps its rotated-token writes and credential preflight; both
+TikTok env variables are required even for an Instagram-only scoped run. Instagram
+refresh requires `api_path: "instagram"`, a nonempty token, and a valid ISO
+`access_token_expires_at` no more than 30 days away. Facebook nodes and nodes
+without a valid expiry are skipped. Success atomically writes the token, new
+expiry and `last_error: null`; Meta 190 atomically writes only `last_error`.
+No scheduler or entry-point name changes.
+
+B deploys `refreshTokens`, `refreshInstagramRates`, `updateInstagramDemographics`,
+`processInstagramComments`, and finally `refreshAllCampaignAnalytics`; it does
+not redeploy the unchanged TikTok rate function. Demographics succeeds with one
+atomic multi-path platform-node update of its existing demographic fields and
+`last_error: null`; token/permission errors record only `last_error`, and rate
+limits leave the node alone.
+
+The user authorized preparing B as a stacked PR against A's
+`feature/creator-onboarding-ig-login` branch before A merges. After A merges,
+retarget B to `dev` with its dependency changes accounted for. This review cadence
+does not change the approved deployment order or grant permission to deploy.
+Live Instagram validation still requires the dev token-signing key and Meta app
+(P3/P4), a verified dev Firebase target, and separately authorized operator steps.
+Do not invoke the currently production-backed dev demographics or analytics
+deployments, regardless of query scope.
 Roll back code by redeploying the previous reviewed directory with the same
 metadata and private configuration. A rotated TikTok secret cannot be rolled back;
 any rollback must keep the current valid credentials.
