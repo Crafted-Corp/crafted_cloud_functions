@@ -56,7 +56,8 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 - [x] (2026-10-15) M3-fn.2 code — `refreshTikTokRates/influencer.js` rewrite in place: key-batched scan of `users` (the `refreshTokens` pattern), select by `creator_socials/tiktok/access_token`, skip `negotiated`, per-user try/catch, await every batch before responding, write `performance` + `updated` + `last_error: null`, `last_error` on 2190008 / 2190002 / 2190003 / 10010; `?user_id=` scope.
 - [x] (2026-10-15) M3-fn.3 code — `refreshInstagramRates/instagram.js`: `last_error` on 190 / 102 / 10 / 200 and `null` on success; 4 / 17 / 32 logged only (T17). (Host routing is M5-fn.)
 - [x] (2026-10-15) Functions PR A combined technical review: GO after targeted plan guard corrections; implementation/test identities match recorded successful checks. Real-vendor verification remains an operator gate.
-- [ ] Functions PR A (M3-fn) against `dev`; F-FN evidence recorded; one tech-lead review of this PR’s full combined diff. Deploy to dev data project (user-authorized), then staging, then prod, each before the matching server deploy.
+- [x] (2026-10-15) Functions PR A opened against `dev`: https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24. Combined technical review GO; deterministic and dev-storage evidence recorded.
+- [ ] Functions PR A operator gates: real-vendor F-FN after P5; separately authorized deployment to dev, then staging, then prod, each before the matching server deploy.
 - [ ] M5-fn.1 — a shared host-selection helper copied into each function folder (see D2): `graphHostFor(instagramNode)`; `refreshInstagramRates/instagram.js:159, :188`, `updateInstagramDemographics/instagram.js:40-43`, `processInstagramComments/instagram.js:49`, `refreshAllCampaignAnalytics/utils.js:402` build their URLs from it.
 - [ ] M5-fn.2 — `refreshTokens/influencer.js` gains the Instagram half: for `api_path === "instagram"` with `access_token_expires_at` within 30 days, `GET {IG host}/refresh_access_token?grant_type=ig_refresh_token&access_token=…`, writing `access_token`, `access_token_expires_at`, `last_error: null`; 190 → `last_error`.
 - [ ] Functions PR B (M5-fn) against `dev` from a fresh worktree off the merged base; deploy before server PR B in each environment; `refreshAllCampaignAnalytics` last, after a `campaign_id`-scoped dry run.
@@ -225,6 +226,14 @@ Every function is a scheduled refresh that overwrites the same fields on each ru
 
 
 ## Artifacts and Notes
+
+PR A delivery: https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24. Combined technical review GO at `7519ef44d27fc0d735ea2f8a8dd2854405048ccd`; only the production-target guard wording required correction. Post-creation `gh pr view 24 --json url,state,mergedAt,headRefOid,baseRefName,headRefName` returned:
+
+```json
+{"baseRefName":"dev","headRefName":"feature/creator-onboarding-ig-login","headRefOid":"7519ef44d27fc0d735ea2f8a8dd2854405048ccd","mergedAt":null,"state":"OPEN","url":"https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24"}
+```
+
+This records the observed PR head before the documentation-only delivery-record commit. No merge or deployment occurred.
 
 2026-10-15 preflight: `gcloud functions list --project=crafted-dev-v1` found all six functions. `gcloud functions describe <deployed-name> --project=crafted-dev-v1 --region=us-central1 --format=json` was parsed privately, emitting name/generation/runtime/entryPoint/source and environment variable names only. All six env-name lists contain only `LOG_EXECUTION_ID`. Exact hosting facts and scheduler cron/time zones are in README `Legacy social-function deployment`. Six social schedulers call functions directly; an unrelated existing traffic-click scheduler calls the production server and was never invoked.
 
