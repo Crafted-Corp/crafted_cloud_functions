@@ -60,8 +60,8 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 - [ ] Functions PR A operator gates: real-vendor F-FN after P5; separately authorized deployment to dev, then staging, then prod, each before the matching server deploy.
 - [x] (2026-10-15) M5-fn.1 code and isolated regression coverage — a shared host-selection helper copied into each function folder (see D2): `graphHostFor(instagramNode)`; `refreshInstagramRates/instagram.js:159, :188`, `updateInstagramDemographics/instagram.js:40-43`, `processInstagramComments/instagram.js:49`, `refreshAllCampaignAnalytics/utils.js:402` build their URLs from it.
 - [x] (2026-10-15) M5-fn.2 code and isolated regression coverage — `refreshTokens/influencer.js` gains the Instagram half: for `api_path === "instagram"` with `access_token_expires_at` within 30 days, `GET {IG host}/refresh_access_token?grant_type=ig_refresh_token&access_token=…`, writing `access_token`, `access_token_expires_at`, `last_error: null`; 190 → `last_error`.
-- [ ] Functions PR B (M5-fn) stacked against `feature/creator-onboarding-ig-login` (#24), then retargeted to `dev` after A merges; deploy before server PR B in each environment; `refreshAllCampaignAnalytics` last, after a scoped operator validation against an explicitly verified permitted data target (never the currently production-backed deployment from an agent).
-- [x] (2026-10-15) PR A outcome and PR B code/check outcome recorded; PR B review/publication and live operator gates remain.
+- [x] (2026-10-15) Functions PR B (M5-fn), https://github.com/Crafted-Corp/crafted_cloud_functions/pull/25, published and stacked against `feature/creator-onboarding-ig-login` (#24), then retargeted to `dev` after A merges; deploy before server PR B in each environment; `refreshAllCampaignAnalytics` last, after a scoped operator validation against an explicitly verified permitted data target (never the currently production-backed deployment from an agent).
+- [x] (2026-10-15) PR A and PR B code/check/review/publication outcomes recorded; live operator gates remain.
 
 
 ## Surprises & Discoveries
@@ -123,7 +123,7 @@ Work starts on the defaults; "all defaults stand" is a complete answer. None blo
 Functions PR A outcome: implements all three M3-fn milestones: atomic rotated TikTok tokens, awaited key-paged TikTok rates, and Instagram reconnect-error persistence with rate-limit suppression. Six syntax checks, strict TypeScript verification of the standalone regression file, five deterministic tests, all four required root gates, and scoped dev Firebase write/readback passed. Real-vendor F-FN remains unverified until P5 and operator deployment. PR #24 is open with combined technical review GO. No rotation or deployment was performed; M5-fn is carried only by B.
 
 
-Functions PR B code/check outcome: M5-fn.1/.2 are implemented in the stacked B worktree with host selection in all four Instagram data jobs and the Instagram token refresher. Demographics has isolated scoped reads and atomic reconnect-error handling; comments/campaign scopes are retained. Analytics uses a per-invocation creator cache rather than a process-global cache. Thirteen isolated Node tests, a strict standalone TypeScript check, twelve syntax checks and all four root gates passed. No deployed function was invoked, no additional live Firebase probe was needed, and no secret was rotated. Live Meta routing/refresh remains unverified pending P3/P4 and a permitted operator data target. The combined B technical review returned GO at ceaa4aef6f559903fd9fb296f764152e51f79c5f against A ddb9f31; the remaining delivery step is PR publication against A’s branch. The review requested only documentation updates for merged client PR #573 and the newly approved Server P/password-backfill prerequisite before Client 2; those are applied without changing verified code inputs.
+Functions PR B code/check outcome: M5-fn.1/.2 are implemented in the stacked B worktree with host selection in all four Instagram data jobs and the Instagram token refresher. Demographics has isolated scoped reads and atomic reconnect-error handling; comments/campaign scopes are retained. Analytics uses a per-invocation creator cache rather than a process-global cache. Thirteen isolated Node tests, a strict standalone TypeScript check, twelve syntax checks and all four root gates passed. No deployed function was invoked, no additional live Firebase probe was needed, and no secret was rotated. Live Meta routing/refresh remains unverified pending P3/P4 and a permitted operator data target. The combined B technical review returned GO at ceaa4aef6f559903fd9fb296f764152e51f79c5f against A ddb9f31; PR #25 is published against A’s branch and remains open/unmerged. The review requested only documentation updates for merged client PR #573 and the newly approved Server P/password-backfill prerequisite before Client 2; those are applied without changing verified code inputs.
 
 
 ## Context and Orientation
@@ -234,6 +234,8 @@ Every function is a scheduled refresh that overwrites the same fields on each ru
 
 
 ## Artifacts and Notes
+
+Functions B publication: https://github.com/Crafted-Corp/crafted_cloud_functions/pull/25. Before push, parent PR #24 remained open at ddb9f3163c268f3caa1c4219c841d2bfdd7364d3 and no B remote branch/PR existed. Post-create readback returned state OPEN, mergedAt null, baseRefName feature/creator-onboarding-ig-login, headRefOid b93a1a59cdfb1806734b48010b3ba56a902d5f9e. The PR body was read back; no merge or deployment was performed.
 
 PR A delivery: https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24. Combined technical review GO at `7519ef44d27fc0d735ea2f8a8dd2854405048ccd`; only the production-target guard wording required correction. Post-creation `gh pr view 24 --json url,state,mergedAt,headRefOid,baseRefName,headRefName` returned:
 
@@ -346,3 +348,8 @@ Implemented host routing, scoped demographics/error updates, per-invocation anal
 ## Revision note 8 — 2026-10-15, orchestrator
 
 Recorded the combined Functions B technical GO, marked client M0/#573 merged, and updated README rollout instructions for the user-approved Server P prerequisite and password backfill before Client 2. The guards against invoking production-backed dev deployments remain unchanged. These are documentation-only review corrections; the recorded runtime check inputs are unchanged.
+
+
+## Revision note 9 — 2026-10-15, orchestrator
+
+Recorded Functions B PR #25 publication and observed open state, its parent/base branch and the final review outcome in Progress, Outcomes and Artifacts. The only changes since measured code verification are documentation. Live operator gates remain outstanding.
