@@ -6,9 +6,9 @@ This ExecPlan is a living document. The sections `Progress`, `Surprises & Discov
 
 This is one of three companion plans built from the FINAL TRD `trds/TRD-creator-onboarding-ig-login.md` (v1.1, 2026-10-15; `trds/` sits at the workspace root `/home/gustavo/dev/crafted/`, outside every repo). The TRD is authoritative for *what*; this plan is authoritative only for *how* in `crafted_cloud_functions/`. The server plan, `server/.agent/exec-plans/creator-onboarding-ig-login.md` (worktree `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server`), owns **every shared contract**, including the Firebase fields these functions read and write; this plan links to it and edits nothing outside this repository. The client plan, `client/.agent/exec-plans/creator-onboarding-ig-login.md`, owns the browser; nothing here is reachable from it.
 
-Worktree: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-crafted_cloud_functions`, branch `feature/creator-onboarding-ig-login`, cut from `origin/dev` at `2c5193d`. All edits happen there; never on `dev` or `main`. `wt-new` does not cover this repository, so the worktree was created manually; each legacy function has its own `node_modules` (`cd functions/<name> && npm install`).
+Functions PR B worktree: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-functions-b-crafted_cloud_functions`, branch `feature/creator-onboarding-ig-login-functions-b`, cut from Functions A at `ddb9f3163c268f3caa1c4219c841d2bfdd7364d3`. Functions A remains in its original worktree on branch `feature/creator-onboarding-ig-login` (PR #24, open). All edits happen there; never on `dev` or `main`. `wt-new` does not cover this repository, so the worktree was created manually; each legacy function has its own `node_modules` (`cd functions/<name> && npm install`).
 
-Authorization state: **implementation authorized on 2026-10-15.** Functions PR A is in progress; deployment and P5 secret rotation remain operator-only. Implementation is delegated to `crafted:cloud-engineer` under the delivery pipeline, with one tech-lead review of the combined diff across the three repos per PR. The cloud engineer also owns the operator steps this plan names (secret rotation, function env, deploys), each run only when the user authorizes it.
+Authorization state: **implementation authorized on 2026-10-15.** Functions PR A is published; Functions PR B is authorized as a stacked PR against `feature/creator-onboarding-ig-login` before A merges; deployment and P5 secret rotation remain operator-only. Implementation is delegated to `crafted:cloud-engineer` under the delivery pipeline, with one tech-lead review of the combined diff across the three repos per PR. The cloud engineer also owns the operator steps this plan names (secret rotation, function env, deploys), each run only when the user authorizes it.
 
 
 ## Purpose / Big Picture
@@ -41,7 +41,7 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 ## The cross-repo contract
 
-[Authoritative contract](server/.agent/exec-plans/creator-onboarding-ig-login.md#the-cross-repo-contract) — in the server repository at `server/.agent/exec-plans/creator-onboarding-ig-login.md` (while the branches are unmerged: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server/.agent/exec-plans/creator-onboarding-ig-login.md`), section `The cross-repo contract`, **revision 2 (2026-10-15)**, subsection *Firebase fields shared with the cloud functions*. This plan relies on: `users/{uid}/creator_socials/instagram/api_path` (`"facebook"` | `"instagram"`, absent = Facebook) selecting `graph.facebook.com/v24.0` vs `graph.instagram.com/v24.0`; `users/{uid}/creator_socials/instagram/{instagram_user_id, access_token_expires_at}` written by the server's Instagram Login path; the `last_error` shape `{ code, subcode?, message_key, at } | null` and its `message_key` catalogue (`ig_190_460`, `ig_190_463`, `ig_190_467`, `ig_190_458`, `ig_190_459`, `ig_190`, `ig_102`, `ig_10`, `ig_200`, `tt_2190002`, `tt_2190003`, `tt_2190008`, `tt_10010`, `tt_invalid_grant`); the rule that every successful connect or refresh writes `last_error: null`; `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` as the function env names; and the deploy order (functions first in each environment, before the server, because an absent `api_path` means the Facebook host). A change there stops M3-fn or M5-fn until these fields are re-checked.
+[Authoritative contract](server/.agent/exec-plans/creator-onboarding-ig-login.md#the-cross-repo-contract) — in the server repository at `server/.agent/exec-plans/creator-onboarding-ig-login.md` (while the branches are unmerged: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server/.agent/exec-plans/creator-onboarding-ig-login.md`), section `The cross-repo contract`, **revision 3 (2026-10-15)**, subsection *Firebase fields shared with the cloud functions*. This plan relies on: `users/{uid}/creator_socials/instagram/api_path` (`"facebook"` | `"instagram"`, absent = Facebook) selecting `graph.facebook.com/v24.0` vs `graph.instagram.com/v24.0`; `users/{uid}/creator_socials/instagram/{instagram_user_id, access_token_expires_at}` written by the server's Instagram Login path; the `last_error` shape `{ code, subcode?, message_key, at } | null` and its `message_key` catalogue (`ig_190_460`, `ig_190_463`, `ig_190_467`, `ig_190_458`, `ig_190_459`, `ig_190`, `ig_102`, `ig_10`, `ig_200`, `tt_2190002`, `tt_2190003`, `tt_2190008`, `tt_10010`, `tt_invalid_grant`); the rule that every successful connect or refresh writes `last_error: null`; `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` as the function env names; and the deploy order (functions first in each environment, before the server, because an absent `api_path` means the Facebook host). A change there stops M3-fn or M5-fn until these fields are re-checked.
 
 
 ## Progress
@@ -60,11 +60,13 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 - [ ] Functions PR A operator gates: real-vendor F-FN after P5; separately authorized deployment to dev, then staging, then prod, each before the matching server deploy.
 - [ ] M5-fn.1 — a shared host-selection helper copied into each function folder (see D2): `graphHostFor(instagramNode)`; `refreshInstagramRates/instagram.js:159, :188`, `updateInstagramDemographics/instagram.js:40-43`, `processInstagramComments/instagram.js:49`, `refreshAllCampaignAnalytics/utils.js:402` build their URLs from it.
 - [ ] M5-fn.2 — `refreshTokens/influencer.js` gains the Instagram half: for `api_path === "instagram"` with `access_token_expires_at` within 30 days, `GET {IG host}/refresh_access_token?grant_type=ig_refresh_token&access_token=…`, writing `access_token`, `access_token_expires_at`, `last_error: null`; 190 → `last_error`.
-- [ ] Functions PR B (M5-fn) against `dev` from a fresh worktree off the merged base; deploy before server PR B in each environment; `refreshAllCampaignAnalytics` last, after a `campaign_id`-scoped dry run.
+- [ ] Functions PR B (M5-fn) stacked against `feature/creator-onboarding-ig-login` (#24), then retargeted to `dev` after A merges; deploy before server PR B in each environment; `refreshAllCampaignAnalytics` last, after a `campaign_id`-scoped dry run.
 - [ ] Outcomes & Retrospective written at the end of each PR.
 
 
 ## Surprises & Discoveries
+
+- Observation (Functions B preflight): `processInstagramComments/instagram.js` already accepts `campaign_id` and returns 404 for a missing campaign on the inherited base. Preserve and regression-check that scope rather than adding a second one. Contract revision 3 changes only staged server email-signup enforcement; the Firebase host/error/expiry contract consumed here is unchanged.
 
 - Observation: the TRD's F-FN row and §5.6 ask for `user_id`-scoped dry runs of every function, including `refreshAllCampaignAnalytics`. Only `refreshInstagramRates` reads `req.query.user_id` (`instagram.js:59-60`); `refreshAllCampaignAnalytics` scopes by `req.query.campaign_id` (`campaign.js:16-18`); `refreshTokens`, `refreshTikTokRates`, `updateInstagramDemographics` and `processInstagramComments` accept no scope at all. A dry run as the TRD words it cannot be made on four of the six.
   Evidence: `grep -n "user_id\|campaign_id" functions/*/{influencer,instagram,campaign,utils}.js` → hits only in `refreshInstagramRates/instagram.js:59-60` and `refreshAllCampaignAnalytics/campaign.js:16`.
@@ -94,7 +96,7 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 - Decision: D4 — `last_error` is written with one `.update()` on the platform node together with whatever else that run writes (never a separate `.set()` per field), and every successful write of that node includes `last_error: null`. The `message_key` mapping lives in the same `graphHost.js`-style copied helper, `socialErrors.js`, so the server's catalogue and the functions' never drift by more than a copy.
   Rationale: `CLAUDE.md` *Firebase Writes* (atomic multi-path update); the contract's catalogue.
   Date/Author: 2026-10-15, Tech Lead.
-- Decision: D5 — PR cadence: functions PR A (M3-fn) and functions PR B (M5-fn), each against `dev`, the second from a fresh worktree after the first merges; each deployed per environment **before** the matching server PR.
+- Decision: D5 — PR cadence: functions PR A (M3-fn) targets `dev`; the user subsequently authorized Functions PR B (M5-fn) as a stacked PR against A’s branch, built before A merges, in the new B worktree. Retarget B to `dev` after A merges. This supersedes the original merge-first build cadence; each still deploys per environment **before** the matching server PR.
   Rationale: TRD §11.2 step 1 and the server plan's D1.
   Date/Author: 2026-10-15, Tech Lead.
 
@@ -164,7 +166,7 @@ Add *Legacy function deploy* with the per-function facts read in the first task,
 
 ## Concrete Steps
 
-All commands run in `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-crafted_cloud_functions` unless stated. `PRODEV` points at the **dev** key file only; nothing here runs against staging or prod from an agent. Secrets are never printed.
+PR B commands run in `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-functions-b-crafted_cloud_functions`; the retained PR A evidence below names the original worktree. Dependencies link to A’s isolated install with identical lockfile/runtime; never install through that link. `PRODEV` points at the **dev** key file only; nothing here runs against staging or prod from an agent. Secrets are never printed.
 
 Before the first edit:
 
@@ -203,7 +205,7 @@ Deploy (operator, per data project, user-authorized; exact flags from the `descr
 
 and the same for the other five, `refreshAllCampaignAnalytics` last. Record `gcloud functions describe` after each deploy (names only).
 
-PR A and PR B: stage explicit paths, commit per function with `Progress` updated, push, open the PR against `dev` with a body file, then `gh pr view <n> --json state,mergedAt,headRefOid`.
+Stage explicit paths and commit each milestone with `Progress` updated. After the combined technical review GO, push B and open it against `feature/creator-onboarding-ig-login` with a body file. Re-read remote and PR state before each push. A remains against `dev`; B is retargeted to `dev` only after A merges. Stacking changes review order, not deployment order.
 
 
 ## Validation and Acceptance
@@ -298,3 +300,8 @@ Completed M3-fn.2/.3, recorded all preflight findings and measured check identit
 ## Revision note 5 — 2026-10-15, Tech Lead
 
 Combined PR A technical review found no implementation blocker. Corrected stale plan instructions that permitted scoped invocation of a production-backed deployment and implied demographics belonged to PR A deployment. README guards and implementation/check identities are unchanged; real-vendor verification remains pending P5.
+
+
+## Revision note 6 — 2026-10-15, Cloud Engineer
+
+Recorded the user's stacked-PR authorization, new isolated Functions B worktree/base/target, contract revision 3 consumer recheck, and inherited comments scope. P9/P13/scheduler facts are retained from A; no deployed invocation or production database access is permitted. Deployment order and vendor prerequisites remain unchanged.
