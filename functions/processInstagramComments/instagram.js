@@ -3,6 +3,8 @@ const axios = require('axios');
 const firebase = require(process.env.PRODEV);
 const cors = require('cors')({origin: true});
 
+const { graphHostFor } = require("./graphHost");
+
 const BATCH_SIZE = 10;
 
 async function processCampaignComments(campaignId, campaign) {
@@ -39,14 +41,14 @@ async function processCampaignComments(campaignId, campaign) {
       const creatorSnapshot = await creatorRef.once('value');
       const creatorData = creatorSnapshot.val();
 
-      if (!creatorData || !creatorData.instagram_business_account_id || !creatorData.access_token) {
+      if (!creatorData || !(creatorData.api_path === "instagram" ? creatorData.instagram_user_id : creatorData.instagram_business_account_id) || !creatorData.access_token) {
         console.log(`[processInstagramComments]     Post ${postId}: creator ${creatorId} missing IG credentials — skipping (has_data=${!!creatorData}, has_ig_id=${!!(creatorData && creatorData.instagram_business_account_id)}, has_token=${!!(creatorData && creatorData.access_token)})`);
         skipped++;
         continue;
       }
 
       try {
-        const url = `https://graph.facebook.com/v24.0/${post.media_id}/comments?access_token=${creatorData.access_token}`;
+        const url = `${graphHostFor(creatorData)}/${post.media_id}/comments?access_token=${creatorData.access_token}`;
         console.log(`[processInstagramComments]     Post ${postId}: calling Graph API for comments`);
 
         const response = await axios.get(url);

@@ -6,9 +6,9 @@ This ExecPlan is a living document. The sections `Progress`, `Surprises & Discov
 
 This is one of three companion plans built from the FINAL TRD `trds/TRD-creator-onboarding-ig-login.md` (v1.1, 2026-10-15; `trds/` sits at the workspace root `/home/gustavo/dev/crafted/`, outside every repo). The TRD is authoritative for *what*; this plan is authoritative only for *how* in `crafted_cloud_functions/`. The server plan, `server/.agent/exec-plans/creator-onboarding-ig-login.md` (worktree `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server`), owns **every shared contract**, including the Firebase fields these functions read and write; this plan links to it and edits nothing outside this repository. The client plan, `client/.agent/exec-plans/creator-onboarding-ig-login.md`, owns the browser; nothing here is reachable from it.
 
-Worktree: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-crafted_cloud_functions`, branch `feature/creator-onboarding-ig-login`, cut from `origin/dev` at `2c5193d`. All edits happen there; never on `dev` or `main`. `wt-new` does not cover this repository, so the worktree was created manually; each legacy function has its own `node_modules` (`cd functions/<name> && npm install`).
+Functions PR B worktree: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-functions-b-crafted_cloud_functions`, branch `feature/creator-onboarding-ig-login-functions-b`, cut from Functions A at `ddb9f3163c268f3caa1c4219c841d2bfdd7364d3`. Functions A remains in its original worktree on branch `feature/creator-onboarding-ig-login` (PR #24, open). All edits happen there; never on `dev` or `main`. `wt-new` does not cover this repository, so the worktree was created manually; each legacy function has its own `node_modules` (`cd functions/<name> && npm install`).
 
-Authorization state: **implementation authorized on 2026-10-15.** Functions PR A is in progress; deployment and P5 secret rotation remain operator-only. Implementation is delegated to `crafted:cloud-engineer` under the delivery pipeline, with one tech-lead review of the combined diff across the three repos per PR. The cloud engineer also owns the operator steps this plan names (secret rotation, function env, deploys), each run only when the user authorizes it.
+Authorization state: **implementation authorized on 2026-10-15.** Functions PR A is published; Functions PR B is authorized as a stacked PR against `feature/creator-onboarding-ig-login` before A merges; deployment and P5 secret rotation remain operator-only. Implementation is delegated to `crafted:cloud-engineer` under the delivery pipeline, with one tech-lead review of the combined diff across the three repos per PR. The cloud engineer also owns the operator steps this plan names (secret rotation, function env, deploys), each run only when the user authorizes it.
 
 
 ## Purpose / Big Picture
@@ -41,13 +41,13 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 ## The cross-repo contract
 
-[Authoritative contract](server/.agent/exec-plans/creator-onboarding-ig-login.md#the-cross-repo-contract) — in the server repository at `server/.agent/exec-plans/creator-onboarding-ig-login.md` (while the branches are unmerged: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server/.agent/exec-plans/creator-onboarding-ig-login.md`), section `The cross-repo contract`, **revision 2 (2026-10-15)**, subsection *Firebase fields shared with the cloud functions*. This plan relies on: `users/{uid}/creator_socials/instagram/api_path` (`"facebook"` | `"instagram"`, absent = Facebook) selecting `graph.facebook.com/v24.0` vs `graph.instagram.com/v24.0`; `users/{uid}/creator_socials/instagram/{instagram_user_id, access_token_expires_at}` written by the server's Instagram Login path; the `last_error` shape `{ code, subcode?, message_key, at } | null` and its `message_key` catalogue (`ig_190_460`, `ig_190_463`, `ig_190_467`, `ig_190_458`, `ig_190_459`, `ig_190`, `ig_102`, `ig_10`, `ig_200`, `tt_2190002`, `tt_2190003`, `tt_2190008`, `tt_10010`, `tt_invalid_grant`); the rule that every successful connect or refresh writes `last_error: null`; `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` as the function env names; and the deploy order (functions first in each environment, before the server, because an absent `api_path` means the Facebook host). A change there stops M3-fn or M5-fn until these fields are re-checked.
+[Authoritative contract](server/.agent/exec-plans/creator-onboarding-ig-login.md#the-cross-repo-contract) — in the server repository at `server/.agent/exec-plans/creator-onboarding-ig-login.md` (while the branches are unmerged: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server/.agent/exec-plans/creator-onboarding-ig-login.md`), section `The cross-repo contract`, **revision 3 (2026-10-15)**, subsection *Firebase fields shared with the cloud functions*. This plan relies on: `users/{uid}/creator_socials/instagram/api_path` (`"facebook"` | `"instagram"`, absent = Facebook) selecting `graph.facebook.com/v24.0` vs `graph.instagram.com/v24.0`; `users/{uid}/creator_socials/instagram/{instagram_user_id, access_token_expires_at}` written by the server's Instagram Login path; the `last_error` shape `{ code, subcode?, message_key, at } | null` and its `message_key` catalogue (`ig_190_460`, `ig_190_463`, `ig_190_467`, `ig_190_458`, `ig_190_459`, `ig_190`, `ig_102`, `ig_10`, `ig_200`, `tt_2190002`, `tt_2190003`, `tt_2190008`, `tt_10010`, `tt_invalid_grant`); the rule that every successful connect or refresh writes `last_error: null`; `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` as the function env names; and the deploy order (functions first in each environment, before the server, because an absent `api_path` means the Facebook host). A change there stops M3-fn or M5-fn until these fields are re-checked.
 
 
 ## Progress
 
 - [x] (2026-10-15) TRD v1.0 FINAL read in full; the function facts the TRD cites re-verified in this worktree at `2c5193d` (see `Surprises & Discoveries`).
-- [x] (2026-10-15) Plan authored; awaiting user review. M0 (the N18 hotfix) is being implemented in the client worktree by a frontend engineer and touches nothing here.
+- [x] (2026-10-15) Plan authored; subsequently approved for implementation. M0 (the N18 hotfix) merged as client PR #573 on 2026-10-15 and touches nothing here.
 - [x] (2026-10-15) Before the first edit: `git fetch origin`, `git ls-remote --heads origin feature/creator-onboarding-ig-login`, `gh pr list --state all --head feature/creator-onboarding-ig-login`; `gcloud functions describe` for each of the six functions in the dev data project to record region, entry point, runtime and env (names only), since the legacy deploy procedure is not documented in this repository (see `Surprises & Discoveries`).
 - [ ] P5 (operator, user-authorized) — rotate the committed TikTok client secret in the TikTok developer console; set `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` on the `refreshTiktokAccessTokens` function env per data project. The old secret is dead the moment the new one is issued, so this step and the M3-fn deploy of `refreshTokens` happen in one sitting.
 - [x] (2026-10-15) P13 (OS2 probe) — count dev creators with `creator_socials/tiktok/access_token` present (read-only shallow scan); record the number as the batch-size basis.
@@ -58,17 +58,19 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 - [x] (2026-10-15) Functions PR A combined technical review: GO after targeted plan guard corrections; implementation/test identities match recorded successful checks. Real-vendor verification remains an operator gate.
 - [x] (2026-10-15) Functions PR A opened against `dev`: https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24. Combined technical review GO; deterministic and dev-storage evidence recorded.
 - [ ] Functions PR A operator gates: real-vendor F-FN after P5; separately authorized deployment to dev, then staging, then prod, each before the matching server deploy.
-- [ ] M5-fn.1 — a shared host-selection helper copied into each function folder (see D2): `graphHostFor(instagramNode)`; `refreshInstagramRates/instagram.js:159, :188`, `updateInstagramDemographics/instagram.js:40-43`, `processInstagramComments/instagram.js:49`, `refreshAllCampaignAnalytics/utils.js:402` build their URLs from it.
-- [ ] M5-fn.2 — `refreshTokens/influencer.js` gains the Instagram half: for `api_path === "instagram"` with `access_token_expires_at` within 30 days, `GET {IG host}/refresh_access_token?grant_type=ig_refresh_token&access_token=…`, writing `access_token`, `access_token_expires_at`, `last_error: null`; 190 → `last_error`.
-- [ ] Functions PR B (M5-fn) against `dev` from a fresh worktree off the merged base; deploy before server PR B in each environment; `refreshAllCampaignAnalytics` last, after a `campaign_id`-scoped dry run.
-- [ ] Outcomes & Retrospective written at the end of each PR.
+- [x] (2026-10-15) M5-fn.1 code and isolated regression coverage — a shared host-selection helper copied into each function folder (see D2): `graphHostFor(instagramNode)`; `refreshInstagramRates/instagram.js:159, :188`, `updateInstagramDemographics/instagram.js:40-43`, `processInstagramComments/instagram.js:49`, `refreshAllCampaignAnalytics/utils.js:402` build their URLs from it.
+- [x] (2026-10-15) M5-fn.2 code and isolated regression coverage — `refreshTokens/influencer.js` gains the Instagram half: for `api_path === "instagram"` with `access_token_expires_at` within 30 days, `GET {IG host}/refresh_access_token?grant_type=ig_refresh_token&access_token=…`, writing `access_token`, `access_token_expires_at`, `last_error: null`; 190 → `last_error`.
+- [x] (2026-10-15) Functions PR B (M5-fn), https://github.com/Crafted-Corp/crafted_cloud_functions/pull/25, published and stacked against `feature/creator-onboarding-ig-login` (#24), then retargeted to `dev` after A merges; deploy before server PR B in each environment; `refreshAllCampaignAnalytics` last, after a scoped operator validation against an explicitly verified permitted data target (never the currently production-backed deployment from an agent).
+- [x] (2026-10-15) PR A and PR B code/check/review/publication outcomes recorded; live operator gates remain.
 
 
 ## Surprises & Discoveries
 
-- Observation: the TRD's F-FN row and §5.6 ask for `user_id`-scoped dry runs of every function, including `refreshAllCampaignAnalytics`. Only `refreshInstagramRates` reads `req.query.user_id` (`instagram.js:59-60`); `refreshAllCampaignAnalytics` scopes by `req.query.campaign_id` (`campaign.js:16-18`); `refreshTokens`, `refreshTikTokRates`, `updateInstagramDemographics` and `processInstagramComments` accept no scope at all. A dry run as the TRD words it cannot be made on four of the six.
+- Observation (Functions B preflight): `processInstagramComments/instagram.js` already accepts `campaign_id` and returns 404 for a missing campaign on the inherited base. Preserve and regression-check that scope rather than adding a second one. Contract revision 3 changes only staged server email-signup enforcement; the Firebase host/error/expiry contract consumed here is unchanged.
+
+- Observation: the TRD's F-FN row and §5.6 ask for `user_id`-scoped dry runs of every function, including `refreshAllCampaignAnalytics`. Only `refreshInstagramRates` reads `req.query.user_id` (`instagram.js:59-60`); `refreshAllCampaignAnalytics` scopes by `req.query.campaign_id` (`campaign.js:16-18`); `refreshTokens`, `refreshTikTokRates` and `updateInstagramDemographics` originally accepted no scope. B preflight corrected the original comments claim: it already had campaign_id scope. The TRD’s universal user_id dry run does not match the campaign-based functions.
   Evidence: `grep -n "user_id\|campaign_id" functions/*/{influencer,instagram,campaign,utils}.js` → hits only in `refreshInstagramRates/instagram.js:59-60` and `refreshAllCampaignAnalytics/campaign.js:16`.
-  Consequence: Decision Log D1 — the two TikTok functions and `updateInstagramDemographics` gain a `?user_id=` scope as part of their edits (a few lines each, in place); `processInstagramComments` and `refreshAllCampaignAnalytics` are scoped by `?campaign_id=` (the latter already is; the former iterates campaigns, so the same key fits). Reported to the user with this plan; not a TRD edit.
+  Consequence: Decision Log D1 — the two TikTok functions and `updateInstagramDemographics` gain a `?user_id=` scope as part of their edits (a few lines each, in place); `processInstagramComments` and `refreshAllCampaignAnalytics` are scoped by `?campaign_id=` (both already are campaign-scoped). Reported to the user with this plan; not a TRD edit.
 - Observation: the legacy functions' deploy procedure is not documented anywhere in this repository. `README.md` and `CLAUDE.md` document only `creator-outreach`'s Gen2 deploy (`gcloud functions deploy creator-outreach-dev …`, `README.md:302`); the legacy functions select their Firebase project through `process.env.PRODEV` (a path to a key file) and are deployed by hand. The deployed name, region, generation, runtime and env of each legacy function are therefore unknown until read from GCP.
   Evidence: `grep -rn "gcloud functions deploy" README.md CLAUDE.md releases` → only `creator-outreach`.
   Consequence: the first task of M3-fn is `gcloud functions describe` per function per data project, recorded (names only, no values) under `Artifacts and Notes`; the deploy commands in `Concrete Steps` are written against those facts once known, and the README gains a *Legacy function deploy* section so the next person does not rediscover it (D3).
@@ -82,7 +84,7 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 ## Decision Log
 
-- Decision: D1 — Scoping flags. `refreshTiktokAccessTokens`, `refreshTiktokRatesForAllAccounts` and `fetchAndUpdateInstagramDemographics` gain `?user_id=<uid>` (process only that user, 404 when the user has no node, same response shape otherwise); `processInstagramComments` gains `?campaign_id=`; `refreshAllCampaignAnalytics` keeps its existing `?campaign_id=`. The F-FN dry runs use these scopes against run-tagged dev records.
+- Decision: D1 — Scoping flags. `refreshTiktokAccessTokens`, `refreshTiktokRatesForAllAccounts` and `fetchAndUpdateInstagramDemographics` gain `?user_id=<uid>` (process only that user, 404 when the user has no node, same response shape otherwise); `processInstagramComments` retains its existing `?campaign_id=`; `refreshAllCampaignAnalytics` keeps its existing `?campaign_id=`. The F-FN dry runs use these scopes against run-tagged dev records.
   Rationale: see the first `Surprises & Discoveries` entry; an unscoped run against dev touches every dev creator's node, which is not a dry run, and `refreshAllCampaignAnalytics` on dev reads prod RTDB (TRD R-6).
   Date/Author: 2026-10-15, Tech Lead.
 - Decision: D2 — Host selection is one small helper, `graphHostFor(instagramNode)` returning `https://graph.instagram.com/v24.0` when `instagramNode.api_path === "instagram"` and `https://graph.facebook.com/v24.0` otherwise, **copied verbatim into each legacy function folder** that needs it (`refreshTokens`, `refreshInstagramRates`, `updateInstagramDemographics`, `processInstagramComments`, `refreshAllCampaignAnalytics`) as a `graphHost.js` beside the function's own files, with an identical body and a one-line header naming the other copies.
@@ -94,13 +96,15 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 - Decision: D4 — `last_error` is written with one `.update()` on the platform node together with whatever else that run writes (never a separate `.set()` per field), and every successful write of that node includes `last_error: null`. The `message_key` mapping lives in the same `graphHost.js`-style copied helper, `socialErrors.js`, so the server's catalogue and the functions' never drift by more than a copy.
   Rationale: `CLAUDE.md` *Firebase Writes* (atomic multi-path update); the contract's catalogue.
   Date/Author: 2026-10-15, Tech Lead.
-- Decision: D5 — PR cadence: functions PR A (M3-fn) and functions PR B (M5-fn), each against `dev`, the second from a fresh worktree after the first merges; each deployed per environment **before** the matching server PR.
+- Decision: D5 — PR cadence: functions PR A (M3-fn) targets `dev`; the user subsequently authorized Functions PR B (M5-fn) as a stacked PR against A’s branch, built before A merges, in the new B worktree. Retarget B to `dev` after A merges. This supersedes the original merge-first build cadence; each still deploys per environment **before** the matching server PR.
   Rationale: TRD §11.2 step 1 and the server plan's D1.
   Date/Author: 2026-10-15, Tech Lead.
 
 - Decision: user rulings on the plan review, 2026-10-15 (Gustavo): PR cadence approved (functions PR A, then B from a fresh worktree after A merges); BD-4 approved — the two copied `.js` helpers (`graphHost.js`, `socialErrors.js`, at most ~20 lines each) are allowed in the legacy folders as the explicit exception to the TypeScript rule, because those folders have no TS build and adding one is out of scope.
 
 - Decision: D6 — retain typed deterministic regression coverage in one standalone Node/VM test, without production mock-env switches. The legacy standalone deployment shape is unchanged. Five tests exercise token errors/success, zero-history rates, formulas, paging/concurrency and Meta media/insights errors. Real-vendor token rotation remains a separate operator F-FN gate. Date/Author: 2026-10-15, Cloud Engineer.
+
+- Decision: D7 — Functions B preserves A’s whole-handler TikTok credential preflight, processes the two platform refreshes sequentially per user inside the existing five-user chunks, and uses an invocation-owned creator-social cache passed from `campaign.js` to `processCampaignAnalytics`. This retains A’s failure behavior and bounds outstanding refresh calls while ensuring creator routing is reread on the next invocation. Date/Author: 2026-10-15, Cloud Engineer.
 
 ### Blocking decisions
 
@@ -116,7 +120,10 @@ Work starts on the defaults; "all defaults stand" is a complete answer. None blo
 
 ## Outcomes & Retrospective
 
-Functions PR A implements all three M3-fn milestones: atomic rotated TikTok tokens, awaited key-paged TikTok rates, and Instagram reconnect-error persistence with rate-limit suppression. Six syntax checks, strict TypeScript verification of the standalone regression file, five deterministic tests, all four required root gates, and scoped dev Firebase write/readback passed. Real-vendor F-FN remains unverified until P5 and operator deployment; review and PR publication remain. No rotation or deployment was performed. M5-fn is untouched.
+Functions PR A outcome: implements all three M3-fn milestones: atomic rotated TikTok tokens, awaited key-paged TikTok rates, and Instagram reconnect-error persistence with rate-limit suppression. Six syntax checks, strict TypeScript verification of the standalone regression file, five deterministic tests, all four required root gates, and scoped dev Firebase write/readback passed. Real-vendor F-FN remains unverified until P5 and operator deployment. PR #24 is open with combined technical review GO. No rotation or deployment was performed; M5-fn is carried only by B.
+
+
+Functions PR B code/check outcome: M5-fn.1/.2 are implemented in the stacked B worktree with host selection in all four Instagram data jobs and the Instagram token refresher. Demographics has isolated scoped reads and atomic reconnect-error handling; comments/campaign scopes are retained. Analytics uses a per-invocation creator cache rather than a process-global cache. Thirteen isolated Node tests, a strict standalone TypeScript check, twelve syntax checks and all four root gates passed. No deployed function was invoked, no additional live Firebase probe was needed, and no secret was rotated. Live Meta routing/refresh remains unverified pending P3/P4 and a permitted operator data target. The combined B technical review returned GO at ceaa4aef6f559903fd9fb296f764152e51f79c5f against A ddb9f31; PR #25 is published against A’s branch and remains open/unmerged. The review requested only documentation updates for merged client PR #573 and the newly approved Server P/password-backfill prerequisite before Client 2; those are applied without changing verified code inputs.
 
 
 ## Context and Orientation
@@ -130,7 +137,7 @@ The six functions this plan edits, their targets and what they do today:
 - `functions/refreshInstagramRates/` → `refreshInstagramRates` (`instagram.js`): batches `users` (or one `?user_id=`), skips `negotiated`, needs `instagram_business_account_id` + `access_token`, fetches `graph.facebook.com/v24.0/{id}/media?fields=media_type&limit=300` (`:159`) and per-media insights (`:188`), writes `suggested_rate` + `updated` (`:41-47`); errors are logged per user (`:131-139`) and nothing records them.
 - `functions/updateInstagramDemographics/` → `fetchAndUpdateInstagramDemographics` (`instagram.js`): batches `users`, four `graph.facebook.com/v24.0/{id}/insights?metric=follower_demographics&breakdown=…` calls (`:40-43`), writes `demographics`.
 - `functions/processInstagramComments/` → `processInstagramComments` (`instagram.js`): iterates `influencer_campaigns` → tasks → posts, fetching `graph.facebook.com/v24.0/{media_id}/comments` (`:49`).
-- `functions/refreshAllCampaignAnalytics/` → `refreshAllCampaignAnalytics` (`campaign.js`, `utils.js`): iterates `influencer_campaigns` (or one `?campaign_id=`, `campaign.js:16-18`), fetching `graph.facebook.com/v24.0/{media_id}/insights?metric=views,comments,likes,shares` (`utils.js:402`). Its dev deployment reads the **prod** RTDB (TRD R-6), so it is deployed last and only after a `campaign_id`-scoped run.
+- `functions/refreshAllCampaignAnalytics/` → `refreshAllCampaignAnalytics` (`campaign.js`, `utils.js`): iterates `influencer_campaigns` (or one `?campaign_id=`, `campaign.js:16-18`), fetching `graph.facebook.com/v24.0/{media_id}/insights?metric=views,comments,likes,shares` (`utils.js:402`). Its dev deployment reads the **prod** RTDB (TRD R-6). Do not invoke it from an agent regardless of scope; deploy it last only after sanctioned operator validation against an explicitly verified permitted target.
 
 Terms: **`api_path`** — `users/{uid}/creator_socials/instagram/api_path`, `"instagram"` for a creator connected through Instagram Login, absent or `"facebook"` otherwise; the only thing that selects the Graph host. **`last_error`** — `users/{uid}/creator_socials/{platform}/last_error`, the contract's shape, read by the browser's reconnect bars and Settings rows. **Run-tagged creator** — a dev `users/{uid}` created for a test run with a recognisable tag in its email, the only kind of record a dry run may touch; user-provided test accounts are never removed. **Key-batched scan** — the 100-at-a-time `orderByKey()` walk; never `.once("value")` on all of `users`.
 
@@ -151,26 +158,27 @@ In `processUserInstagramRate`, on a Meta error response (`error.code` 190 with a
 
 ### M5-fn.1 — host routing
 
-Add `graphHost.js` (D2) to the five folders and change every Graph URL literal to `` `${graphHostFor(instagramNode)}/…` ``: `refreshInstagramRates/instagram.js:159, :188` (the node is `user.creator_socials.instagram`), `updateInstagramDemographics/instagram.js:40-43` (plus `?user_id=` scope and `last_error` on 190 / 10 / 200), `processInstagramComments/instagram.js:49` (the creator's node is read for each post's creator — today it reads `creatorData.access_token`, so `creatorData.api_path` is beside it; plus `?campaign_id=` scope), `refreshAllCampaignAnalytics/utils.js:402` (the post's token comes with the post; the creator's `api_path` must be read from `users/{creator_id}/creator_socials/instagram` once per creator and cached per run). The Instagram host uses the creator's `instagram_user_id` where the Facebook path used `instagram_business_account_id`; both are the Instagram professional account id, so the same path works, and the server writes both fields on the Instagram path.
+Add `graphHost.js` (D2) to the five folders and change every Graph URL literal to `` `${graphHostFor(instagramNode)}/…` ``: `refreshInstagramRates/instagram.js:159, :188` (the node is `user.creator_socials.instagram`), `updateInstagramDemographics/instagram.js:40-43` (plus `?user_id=` scope and `last_error` on 190 / 10 / 200), `processInstagramComments/instagram.js:49` (the creator's node is read for each post's creator — today it reads `creatorData.access_token`, so `creatorData.api_path` is beside it; retaining the existing `?campaign_id=` scope), `refreshAllCampaignAnalytics/utils.js:402` (the post's token comes with the post; the creator's `api_path` must be read from `users/{creator_id}/creator_socials/instagram` once per creator and cached per run). The Instagram host uses the creator's `instagram_user_id` where the Facebook path used `instagram_business_account_id`; both are the Instagram professional account id, so the same path works, and the server writes both fields on the Instagram path.
 
 ### M5-fn.2 — Instagram long-lived refresh in `refreshTokens/influencer.js`
 
-In the same batch walk, for a node with `creator_socials/instagram/api_path === "instagram"`, a non-empty `access_token` and an `access_token_expires_at` within 30 days, `GET https://graph.instagram.com/v24.0/refresh_access_token?grant_type=ig_refresh_token&access_token=…`; on success `.update()` the instagram node with `access_token`, `access_token_expires_at` (now + `expires_in` seconds, ISO) and `last_error: null`; on a 190 write `last_error` (`ig_190_<subcode>` / `ig_190`); other errors logged. Nodes without `api_path` or without `access_token_expires_at` are skipped (BD-6). The function's name stays `refreshTiktokAccessTokens` (renaming the target would change the deploy and the scheduler; the README records that it now refreshes both).
+In the same batch walk, after each user’s TikTok refresh, for a node with `creator_socials/instagram/api_path === "instagram"`, a non-empty `access_token` and an `access_token_expires_at` within 30 days, `GET https://graph.instagram.com/v24.0/refresh_access_token?grant_type=ig_refresh_token&access_token=…`; on success `.update()` the instagram node with `access_token`, `access_token_expires_at` (now + `expires_in` seconds, ISO) and `last_error: null`; on a 190 write `last_error` (`ig_190_<subcode>` / `ig_190`); other errors logged. Nodes without `api_path` or without `access_token_expires_at` are skipped (BD-6). The existing TikTok credential preflight remains fail-closed for the whole handler, including an Instagram-only scoped run. The function's name stays `refreshTiktokAccessTokens` (renaming the target would change the deploy and the scheduler; the README records that it now refreshes both).
 
 ### README (D3)
 
-Add *Legacy function deploy* with the per-function facts read in the first task, the env var names, the per-environment order (functions → Supabase migration → server → client), the `?user_id=` / `?campaign_id=` dry-run scopes, and the rule that `refreshAllCampaignAnalytics` deploys last after a scoped run.
+Add *Legacy function deploy* with the per-function facts read in the first task, the env var names, the per-environment order (functions → Supabase migration → server → client), the `?user_id=` / `?campaign_id=` dry-run scopes, and the rule that `refreshAllCampaignAnalytics` deploys last after scoped operator validation against an explicitly verified permitted target.
 
 
 ## Concrete Steps
 
-All commands run in `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-crafted_cloud_functions` unless stated. `PRODEV` points at the **dev** key file only; nothing here runs against staging or prod from an agent. Secrets are never printed.
+PR B commands run in `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-functions-b-crafted_cloud_functions`; the retained PR A evidence below names the original worktree. Dependencies link to A’s isolated install with identical lockfile/runtime; never install through that link. `PRODEV` points at the **dev** key file only; nothing here runs against staging or prod from an agent. Secrets are never printed.
 
 Before the first edit:
 
     git fetch origin
-    git ls-remote --heads origin feature/creator-onboarding-ig-login
-    gh pr list --state all --head feature/creator-onboarding-ig-login
+    git ls-remote --heads origin feature/creator-onboarding-ig-login-functions-b
+    gh pr list --state all --head feature/creator-onboarding-ig-login-functions-b
+    gh pr view 24 --json state,mergedAt,headRefOid
     gcloud config get-value project                      # unset locally; use explicit --project=crafted-dev-v1
     for f in refreshTokens refreshTikTokRates refreshInstagramRates updateInstagramDemographics processInstagramComments refreshAllCampaignAnalytics; do gcloud functions describe "$f" --project=crafted-dev-v1 --region=us-central1 --format='value(name,environment,buildConfig.runtime,buildConfig.entryPoint)'; done
     gcloud scheduler jobs list --project=crafted-dev-v1 --location=us-central1 --format='table(name,schedule,timeZone,httpTarget.uri,state)'
@@ -203,7 +211,7 @@ Deploy (operator, per data project, user-authorized; exact flags from the `descr
 
 and the same for the other five, `refreshAllCampaignAnalytics` last. Record `gcloud functions describe` after each deploy (names only).
 
-PR A and PR B: stage explicit paths, commit per function with `Progress` updated, push, open the PR against `dev` with a body file, then `gh pr view <n> --json state,mergedAt,headRefOid`.
+Stage explicit paths and commit each milestone with `Progress` updated. After the combined technical review GO, push B and open it against `feature/creator-onboarding-ig-login` with a body file. Re-read remote and PR state before each push. A remains against `dev`; B is retargeted to `dev` only after A merges. Stacking changes review order, not deployment order.
 
 
 ## Validation and Acceptance
@@ -227,11 +235,11 @@ Every function is a scheduled refresh that overwrites the same fields on each ru
 
 ## Artifacts and Notes
 
+Functions B publication: https://github.com/Crafted-Corp/crafted_cloud_functions/pull/25. Before push, parent PR #24 remained open at ddb9f3163c268f3caa1c4219c841d2bfdd7364d3 and no B remote branch/PR existed. Post-create readback returned state OPEN, mergedAt null, baseRefName feature/creator-onboarding-ig-login, headRefOid b93a1a59cdfb1806734b48010b3ba56a902d5f9e. The PR body was read back; no merge or deployment was performed.
+
 PR A delivery: https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24. Combined technical review GO at `7519ef44d27fc0d735ea2f8a8dd2854405048ccd`; only the production-target guard wording required correction. Post-creation `gh pr view 24 --json url,state,mergedAt,headRefOid,baseRefName,headRefName` returned:
 
-```json
-{"baseRefName":"dev","headRefName":"feature/creator-onboarding-ig-login","headRefOid":"7519ef44d27fc0d735ea2f8a8dd2854405048ccd","mergedAt":null,"state":"OPEN","url":"https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24"}
-```
+    {"baseRefName":"dev","headRefName":"feature/creator-onboarding-ig-login","headRefOid":"7519ef44d27fc0d735ea2f8a8dd2854405048ccd","mergedAt":null,"state":"OPEN","url":"https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24"}
 
 This records the observed PR head before the documentation-only delivery-record commit. No merge or deployment occurred.
 
@@ -248,6 +256,33 @@ Measured successful commands from this worktree, exit 0 throughout: `node --chec
 Scoped storage evidence: an isolated Node/VM invocation injected the real Firebase Admin app validated as `crafted-dev-v1`, synthetic vendor responses and synthetic tokens. Run tag `agent-creator-onboarding-1792074909103`; all calls carried `query.user_id` equal to the owned tag. Rotation produced the new refresh token and future expiries before response; TikTok zero-history produced `processed: 1`, followerCount 12 and suggestedRate 0 before response; subsequent invalid_grant changed only last_error. Readbacks passed in 2027 ms, then the owned users/{run-tag} node was removed and absence verified. No existing creator was modified. Firebase connection used the dev database URL and private server `.env.dev` credential; no Supabase identity was created. These are real-storage / synthetic-vendor checks, not real TikTok F-FN. Two real-vendor successful rotations and real forced vendor errors remain unverified; P5 credentials/deployment are not present and no secret was rotated.
 
 Applicable code identities at successful verification: token implementation `fb106baf324c6202bce9041f3ff57d96e38f1fad83b29244f0365046661a8f8e`; TikTok rates `ab500138d60ece90372efd29d641fd9e9f60373f44bd75c0305eebd9db2c1b01`; Instagram rates `cf9e821655e3c92e07e45d188221c0d16ce79e4de76e2d8d637d0910b72976d4`; regression test `6e7bce621864a710693bd27b0e058a3110040de2e9098351f4cba230d5d414d4`. Identical copied helper content is versioned alongside them. README/plan-only updates do not invalidate these code-bound checks.
+
+
+Functions B verification (2026-10-15, 16:22:16–16:22:29 UTC): source inputs committed at `f86b1562c3023756928ddaaa69a011ae2fcfd0f8`, based on Functions A `ddb9f3163c268f3caa1c4219c841d2bfdd7364d3`. Working directory is the B worktree named above, Node `v22.22.0`, npm `10.9.4`. Node dependencies are a symlink to A’s isolated install, with unchanged root lock SHA-256 `7e7134ecef7c92e17beee979b1a4eebbda6c6b44b3395d09befd2af48c9b7f3e` and installed lock SHA-256 `3d0ef0b7eb6de37611b0ab1d92b2ef1be153b35d2b6fe674af6af056f63a3eb0`. No install ran through the symlink. Tests inject every vendor/Firebase/env dependency into VM contexts; no service-account/env file or schema is read. Root gates mock creator-outreach imports, as in A, and use `NX_DAEMON=false NX_ISOLATE_PLUGINS=false CI=true`.
+
+All twelve syntax checks exited 0: `node --check functions/refreshTokens/influencer.js` 27 ms; `node --check functions/refreshInstagramRates/instagram.js` 18 ms; `node --check functions/updateInstagramDemographics/instagram.js` 34 ms; `node --check functions/processInstagramComments/instagram.js` 29 ms; `node --check functions/refreshAllCampaignAnalytics/campaign.js` 19 ms; `node --check functions/refreshAllCampaignAnalytics/utils.js` 27 ms; `node --check functions/refreshTokens/graphHost.js` 18 ms; `node --check functions/refreshInstagramRates/graphHost.js` 19 ms; `node --check functions/updateInstagramDemographics/graphHost.js` 19 ms; `node --check functions/processInstagramComments/graphHost.js` 36 ms; `node --check functions/refreshAllCampaignAnalytics/graphHost.js` 18 ms; `node --check functions/updateInstagramDemographics/socialErrors.js` 19 ms. Strict standalone command `node_modules/.bin/tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --types node --skipLibCheck maintenance/creatorOnboardingFunctions.test.ts` passed in 979 ms. `node --experimental-strip-types --test maintenance/creatorOnboardingFunctions.test.ts` passed all 13 tests / 0 failures in 408 ms. It retains A’s five cases and adds identical-helper/default-host selection, both rate endpoints and account IDs, scoped demographics/transformation/error writes, comments scope and host, analytics cache reuse across campaigns and invalidation next invocation, Instagram refresh window/atomic success, and 190 subcodes/transient failures with platform isolation. `npm run check:ci` 2766 ms; `npm run typecheck` 3117 ms; `npm run test:ci` 2900 ms; `npm run build` 3027 ms all exited 0; creator-outreach tests reported 4 test files / 33 tests passed. These root gates cover creator-outreach, while the separate strict check and Node suite cover the changed legacy functions.
+
+Records with exact commands, start/end timestamps, durations, runtime, code/dependency hashes and outcomes are in `/tmp/creator-onboarding-functions-b-checks.json`; sanitized outputs are `/tmp/creator-onboarding-functions-b-check-{0..17}.log`. The initial new-suite run found a test-double mismatch for array `.set()` payloads and a TypeScript union inference issue; the fixture now records real JSON set shapes separately and uses an explicit candidate type. Both were corrected before final measured checks. A transient syntax typo during demographics extraction was corrected before any commit. Existing CRLF files are preserved; staged whitespace checks use `git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol diff --cached --check`.
+
+Applicable source identities:
+
+    functions/refreshTokens/influencer.js: 60fc94901ec0960fb129954afa97cf5a3a34607dd9ce4cf4fb1464ff0f0eea7c
+    functions/refreshInstagramRates/instagram.js: 9cf66ca088cf7ada912bdc9ec7c3d1f8769cb91415c015a6ddcbddf833a6892b
+    functions/updateInstagramDemographics/instagram.js: 2c8a65fe346ad58cd83894157bee218540eef8d206e8024dc6348033169b5943
+    functions/processInstagramComments/instagram.js: ffe732b42deb41f433cca3e260eea798ad5381cead75864d1de009372d3dc0c8
+    functions/refreshAllCampaignAnalytics/campaign.js: 1281b9eb28e81f0e436eecfe234641e9c92c5d9c08aa0c6c46ec290eebdebf3b
+    functions/refreshAllCampaignAnalytics/utils.js: 79bea63423732d5a48a6d86e6447d4471e005f6f1596c08f21fb1f1cebf321b4
+    functions/refreshTokens/graphHost.js: bbe1eeb05bd3c3e41ba29877a063a3dcbb417347c6e8f278f4b9fd3c3abea9bf
+    functions/refreshInstagramRates/graphHost.js: bbe1eeb05bd3c3e41ba29877a063a3dcbb417347c6e8f278f4b9fd3c3abea9bf
+    functions/updateInstagramDemographics/graphHost.js: bbe1eeb05bd3c3e41ba29877a063a3dcbb417347c6e8f278f4b9fd3c3abea9bf
+    functions/processInstagramComments/graphHost.js: bbe1eeb05bd3c3e41ba29877a063a3dcbb417347c6e8f278f4b9fd3c3abea9bf
+    functions/refreshAllCampaignAnalytics/graphHost.js: bbe1eeb05bd3c3e41ba29877a063a3dcbb417347c6e8f278f4b9fd3c3abea9bf
+    functions/updateInstagramDemographics/socialErrors.js: 6d8cc034f7acda276e199e397894799435538738d7c02bcbf76ec34b62eb52e6
+    maintenance/creatorOnboardingFunctions.test.ts: e6152fd91e9aad21366dceadd4678ab84fe2ed9ec178bce8321f093ac05b98a8
+    package-lock.json: 7e7134ecef7c92e17beee979b1a4eebbda6c6b44b3395d09befd2af48c9b7f3e
+    node_modules/.package-lock.json: 3d0ef0b7eb6de37611b0ab1d92b2ef1be153b35d2b6fe674af6af056f63a3eb0
+
+The five `graphHost.js` copies are byte-identical, five lines each; the copied demographics `socialErrors.js` matches A’s existing 13-line catalogue. The tests load only the edited handlers, `utils.js`, their helpers, built-in Node modules and explicit doubles; this bounds their code identity. README/plan-only edits do not change those inputs. No live Meta or TikTok call, deployed invocation, database mutation, secret rotation or deployment occurred in B. P9/P13/scheduler metadata is retained as the same-session A observation, not claimed as newly measured live state. Real-vendor F-FN still depends on P3/P4 for Instagram and P5 for TikTok, plus explicit operator deployment and a permitted target.
 
 
 ## Interfaces and Dependencies
@@ -271,7 +306,7 @@ and `socialErrors.js`:
     const lastErrorFor = (code, subcode, message_key) => ({ code, ...(subcode !== undefined ? { subcode } : {}), message_key, at: new Date().toISOString() });
     module.exports = { metaMessageKey, tiktokMessageKey, lastErrorFor };
 
-Function targets (unchanged): `refreshTiktokAccessTokens`, `refreshTiktokRatesForAllAccounts`, `refreshInstagramRates`, `fetchAndUpdateInstagramDemographics`, `processInstagramComments`, `refreshAllCampaignAnalytics`. New query scopes: `?user_id=` on the first four, `?campaign_id=` on the last two.
+Function targets (unchanged): `refreshTiktokAccessTokens`, `refreshTiktokRatesForAllAccounts`, `refreshInstagramRates`, `fetchAndUpdateInstagramDemographics`, `processInstagramComments`, `refreshAllCampaignAnalytics`. New/retained query scopes: `?user_id=` on the first four; existing `?campaign_id=` retained on the last two.
 
 Dependencies on other plans: the server writes `api_path`, `instagram_user_id` and `access_token_expires_at` (server M5) and reads `last_error` (server M1.3's status read); the client renders `last_error` through the reconnect bars (client M3). This repository deploys first in every environment. External gates: P5 (TikTok secret rotation, operator), P9, P13; the server's P3 / P4 gate M5-fn's dev verification only (an Instagram-path creator cannot exist before the server's flag-on dev build).
 
@@ -298,3 +333,23 @@ Completed M3-fn.2/.3, recorded all preflight findings and measured check identit
 ## Revision note 5 — 2026-10-15, Tech Lead
 
 Combined PR A technical review found no implementation blocker. Corrected stale plan instructions that permitted scoped invocation of a production-backed deployment and implied demographics belonged to PR A deployment. README guards and implementation/check identities are unchanged; real-vendor verification remains pending P5.
+
+
+## Revision note 6 — 2026-10-15, Cloud Engineer
+
+Recorded the user's stacked-PR authorization, new isolated Functions B worktree/base/target, contract revision 3 consumer recheck, and inherited comments scope. P9/P13/scheduler facts are retained from A; no deployed invocation or production database access is permitted. Deployment order and vendor prerequisites remain unchanged.
+
+
+## Revision note 7 — 2026-10-15, Cloud Engineer
+
+Implemented host routing, scoped demographics/error updates, per-invocation analytics creator caching, and Instagram long-lived refresh while preserving A’s TikTok behavior. Updated progress, outcomes, decisions, README deployment facts/guards and measured check identities. PR B is prepared as authorized stacking; no deployment or real-vendor verification is claimed.
+
+
+## Revision note 8 — 2026-10-15, orchestrator
+
+Recorded the combined Functions B technical GO, marked client M0/#573 merged, and updated README rollout instructions for the user-approved Server P prerequisite and password backfill before Client 2. The guards against invoking production-backed dev deployments remain unchanged. These are documentation-only review corrections; the recorded runtime check inputs are unchanged.
+
+
+## Revision note 9 — 2026-10-15, orchestrator
+
+Recorded Functions B PR #25 publication and observed open state, its parent/base branch and the final review outcome in Progress, Outcomes and Artifacts. The only changes since measured code verification are documentation. Live operator gates remain outstanding.

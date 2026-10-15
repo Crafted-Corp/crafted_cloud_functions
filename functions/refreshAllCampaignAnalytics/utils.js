@@ -2,6 +2,7 @@ require("dotenv").config();
 const firebase = require(process.env.PRODEV);
 const moment = require("moment");
 const axios = require("axios");
+const { graphHostFor } = require("./graphHost");
 
 /**
  * Processes analytics for a single campaign.
@@ -9,7 +10,7 @@ const axios = require("axios");
  * @param {object} params.campaign - The campaign data object.
  * @param {string} params.curDate - The current date string.
  */
-async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
+async function processCampaignAnalytics({ campaign_id, campaign, curDate, instagramCreators = new Map() }) {
   let { brand_id } = campaign;
   let totalViews = 0;
   let totalLikes = 0;
@@ -71,20 +72,20 @@ async function processCampaignAnalytics({ campaign_id, campaign, curDate }) {
       }
 
       if (post.platform === "instagram") {
-        const userSnapshotPromise = firebase
-          .database()
-          .ref(
-            `users/${post.creator_id}/creator_socials/instagram/access_token`,
-          )
-          .once("value");
-        const snapshot = await userSnapshotPromise;
-        const accessToken = snapshot.val();
+        if (!instagramCreators.has(post.creator_id)) {
+          instagramCreators.set(post.creator_id, firebase.database()
+            .ref(`users/${post.creator_id}/creator_socials/instagram`)
+            .once("value").then((snapshot) => snapshot.val()));
+        }
+        const instagramInfo = await instagramCreators.get(post.creator_id);
+        const accessToken = instagramInfo?.access_token;
         if (accessToken) {
           const new_entry = {
             media_id: post.media_id,
             task_id: task_id,
             post_id: postId,
             token: accessToken,
+            api_path: instagramInfo.api_path,
             short_link: post.short_link,
             creator_id: post.creator_id,
           };
@@ -399,7 +400,7 @@ async function fetchInstagramData(post, totalClicksForLink, campaign_id) {
       throw new Error("Missing media_id");
     }
 
-    const insightsUrl = `https://graph.facebook.com/v24.0/${post.media_id}/insights?access_token=${post.token}&metric=views,comments,likes,shares`;
+    const insightsUrl = `${graphHostFor(post)}/${post.media_id}/insights?access_token=${post.token}&metric=views,comments,likes,shares`;
     const insightsResponse = await axios.get(insightsUrl);
     const { data: insightsData } = insightsResponse;
 
