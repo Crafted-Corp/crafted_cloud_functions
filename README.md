@@ -341,3 +341,93 @@ feat: add Instagram profile picture caching during token refresh
 fix: handle TikTok refresh_token rotation correctly
 chore: update Firebase SDK
 ```
+
+## Legacy social-function deployment
+
+The following facts were read on 2026-10-15 with explicit
+`--project=crafted-dev-v1 --region=us-central1`. These are hosting facts;
+**hosting in that project does not establish which Firebase database a function uses.**
+All six functions are Gen2 HTTP functions in `us-central1`.
+
+| Source directory | Deployed name | Entry point | Runtime |
+| --- | --- | --- | --- |
+| `functions/refreshTokens` | `refreshTokens` | `refreshTiktokAccessTokens` | `nodejs20` |
+| `functions/refreshTikTokRates` | `refreshTikTokRates` | `refreshTiktokRatesForAllAccounts` | `nodejs20` |
+| `functions/refreshInstagramRates` | `refreshInstagramRates` | `refreshInstagramRates` | `nodejs22` |
+| `functions/updateInstagramDemographics` | `updateInstagramDemographics` | `fetchAndUpdateInstagramDemographics` | `nodejs20` |
+| `functions/processInstagramComments` | `processInstagramComments` | `processInstagramComments` | `nodejs20` |
+| `functions/refreshAllCampaignAnalytics` | `refreshAllCampaignAnalytics` | `refreshAllCampaignAnalytics` | `nodejs20` |
+
+The deployed service env lists contain only `LOG_EXECUTION_ID`; legacy source bundles
+also load private `.env` files. `PRODEV` selects a Firebase connection module.
+Before any local execution or deploy, inspect that module's database URL and its
+service-account `project_id` privately. Dev validation must use `crafted-dev-v1`
+credentials and `https://crafted-dev-v1-default-rtdb.firebaseio.com`.
+The downloaded `updateInstagramDemographics` bundle instead selects
+`firebase_connect`, contains a `crafted-v1` service account, and points at production.
+Do not invoke it for dev testing. `refreshAllCampaignAnalytics` is also known to
+read production from its dev-hosted deployment; do not invoke it from an agent.
+Metadata/source inspection does not require executing either function.
+
+The six social Cloud Scheduler jobs target the functions directly:
+
+| Function | Cron | Time zone |
+| --- | --- | --- |
+| `refreshTokens` | `0 8 * * *` | `America/New_York` |
+| `refreshTikTokRates` | `0 0 1 * *` | `America/Cancun` |
+| `refreshInstagramRates` | `0 1 1 * *` | `America/Cancun` |
+| `updateInstagramDemographics` | `0 5 * * *` | `America/New_York` |
+| `processInstagramComments` | `0 6 * * *` | `America/New_York` |
+| `refreshAllCampaignAnalytics` | `0 10 * * *` | `America/New_York` |
+
+Functions PR A deploys only the first three directories. The operator must rotate
+the previously committed TikTok client secret (P5), then deploy `refreshTokens`
+with `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` in its runtime environment in
+the same sitting. Missing credentials make the handler return 500 before reads.
+Keep private env files, service-account keys and vendor values out of git and logs.
+An operator-prepared private env YAML supplies `PRODEV` and, for `refreshTokens`,
+both TikTok variables. For example, preserving the observed dev runtime:
+
+```bash
+gcloud functions deploy refreshTokens \
+  --project=crafted-dev-v1 --region=us-central1 --gen2 --runtime=nodejs20 \
+  --source=functions/refreshTokens --entry-point=refreshTiktokAccessTokens \
+  --trigger-http --env-vars-file=/private/path/refreshTokens-dev.yaml
+```
+
+Use the corresponding row's source, deployed name, entry point and runtime for
+the other functions. Preserve the existing invoker policy and resource settings;
+inspect each existing deployment before running the command. Staging and production
+hosting/database identities must be inspected separately before promotion.
+P5 gates deployment, not PR review. No deployment or secret rotation is automated
+by these changes.
+
+After PR A, verify only run-tagged dev creators with `?user_id=<uid>` on token,
+TikTok-rate and Instagram-rate handlers. Reads of the resulting platform node must
+show rotated tokens, both expiries, `updated`/`updated_at`, and cleared `last_error`
+after success. A synthetic vendor response verifies storage and response ordering;
+real TikTok rotation requires two successful real-vendor runs after P5.
+`updateInstagramDemographics` and comments gain scopes in Functions PR B;
+`refreshAllCampaignAnalytics` already accepts `?campaign_id=<id>`.
+
+Deploy in the approved order per environment: Functions A, Supabase migration,
+Server A, Client 2, then Server C after Client 2 is live. Later, Functions B precedes
+Server B and Client 3 with Instagram Login flags off; dev flag enablement/backfills,
+Meta review, staging and production follow. In B, deploy campaign analytics last,
+after sanctioned scoped validation against an explicitly verified data target.
+Instagram host routing is B work; A retains the Facebook host.
+Roll back code by redeploying the previous reviewed directory with the same
+metadata and private configuration. A rotated TikTok secret cannot be rolled back;
+any rollback must keep the current valid credentials.
+
+Legacy regression checks run without loading Firebase or contacting vendors:
+
+```bash
+node --experimental-strip-types --test maintenance/creatorOnboardingFunctions.test.ts
+node_modules/.bin/tsc --noEmit --strict --target es2022 --module nodenext \
+  --moduleResolution nodenext --types node --skipLibCheck \
+  maintenance/creatorOnboardingFunctions.test.ts
+```
+
+The root `check:ci`, `typecheck`, `test:ci` and `build` scripts cover
+`creator-outreach` only; the standalone checks above cover these legacy edits.

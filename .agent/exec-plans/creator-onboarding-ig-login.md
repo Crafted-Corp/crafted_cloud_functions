@@ -27,7 +27,7 @@ How to see each working is in `Validation and Acceptance`.
 
 ## Non-Goals
 
-- No TypeScript port of the legacy functions (T13 / OQ-F1); every edit is in place in the existing `.js` files, and no new `.js` file is created. A genuinely new module would be a `.ts` file, which these legacy folders cannot build — so if one is needed, stop and ask (the workspace TypeScript rule).
+- No TypeScript port of the legacy functions (T13 / OQ-F1); every edit is in place in the existing `.js` files, with only the user-approved copied `socialErrors.js` / `graphHost.js` exception (each at most approximately 20 lines). New regression tests are fully typed TypeScript and run with Node type stripping; no TS port or new dependency is introduced.
 - No Supabase read or write from any function (TRD §3.2 rule 2): `grep -rn "@supabase\|SUPABASE_" functions/` stays empty.
 - No rate-limit backoff for Meta codes 4 / 17 / 32 (T17): logged, retried by the next scheduled run, never a `last_error`.
 - No change to schedules, triggers, regions or the `PRODEV` key-file mechanism; no change to `creator-outreach`.
@@ -48,14 +48,14 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 - [x] (2026-10-15) TRD v1.0 FINAL read in full; the function facts the TRD cites re-verified in this worktree at `2c5193d` (see `Surprises & Discoveries`).
 - [x] (2026-10-15) Plan authored; awaiting user review. M0 (the N18 hotfix) is being implemented in the client worktree by a frontend engineer and touches nothing here.
-- [ ] Before the first edit: `git fetch origin`, `git ls-remote --heads origin feature/creator-onboarding-ig-login`, `gh pr list --state all --head feature/creator-onboarding-ig-login`; `gcloud functions describe` for each of the six functions in the dev data project to record region, entry point, runtime and env (names only), since the legacy deploy procedure is not documented in this repository (see `Surprises & Discoveries`).
+- [x] (2026-10-15) Before the first edit: `git fetch origin`, `git ls-remote --heads origin feature/creator-onboarding-ig-login`, `gh pr list --state all --head feature/creator-onboarding-ig-login`; `gcloud functions describe` for each of the six functions in the dev data project to record region, entry point, runtime and env (names only), since the legacy deploy procedure is not documented in this repository (see `Surprises & Discoveries`).
 - [ ] P5 (operator, user-authorized) — rotate the committed TikTok client secret in the TikTok developer console; set `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` on the `refreshTiktokAccessTokens` function env per data project. The old secret is dead the moment the new one is issued, so this step and the M3-fn deploy of `refreshTokens` happen in one sitting.
-- [ ] P13 (OS2 probe) — count dev creators with `creator_socials/tiktok/access_token` present (read-only shallow scan); record the number as the batch-size basis.
-- [ ] P9 — confirm the deployed `updateInstagramDemographics` matches the code (no hardcoded uid gate): `gcloud functions describe` + a diff of the deployed source against `functions/updateInstagramDemographics/`.
+- [x] (2026-10-15) P13 (OS2 probe) — count dev creators with `creator_socials/tiktok/access_token` present (read-only shallow scan); record the number as the batch-size basis.
+- [x] (2026-10-15) P9 — confirm the deployed `updateInstagramDemographics` matches the code (no hardcoded uid gate): `gcloud functions describe` + a diff of the deployed source against `functions/updateInstagramDemographics/`.
 - [x] (2026-10-15) M3-fn.1 code — `refreshTokens/influencer.js`: env-sourced TikTok credentials; persist the rotated `refresh_token` plus both expiries and `last_error: null` in one `.update()`; `last_error` on `invalid_grant` / `10010`; `?user_id=` scope.
 - [x] (2026-10-15) M3-fn.2 code — `refreshTikTokRates/influencer.js` rewrite in place: key-batched scan of `users` (the `refreshTokens` pattern), select by `creator_socials/tiktok/access_token`, skip `negotiated`, per-user try/catch, await every batch before responding, write `performance` + `updated` + `last_error: null`, `last_error` on 2190008 / 2190002 / 2190003 / 10010; `?user_id=` scope.
 - [x] (2026-10-15) M3-fn.3 code — `refreshInstagramRates/instagram.js`: `last_error` on 190 / 102 / 10 / 200 and `null` on success; 4 / 17 / 32 logged only (T17). (Host routing is M5-fn.)
-- [ ] Functions PR A (M3-fn) against `dev`; F-FN evidence recorded; tech-lead review with server PR A and client PR 2. Deploy to dev data project (user-authorized), then staging, then prod, each before the matching server deploy.
+- [ ] Functions PR A (M3-fn) against `dev`; F-FN evidence recorded; one tech-lead review of this PR’s full combined diff. Deploy to dev data project (user-authorized), then staging, then prod, each before the matching server deploy.
 - [ ] M5-fn.1 — a shared host-selection helper copied into each function folder (see D2): `graphHostFor(instagramNode)`; `refreshInstagramRates/instagram.js:159, :188`, `updateInstagramDemographics/instagram.js:40-43`, `processInstagramComments/instagram.js:49`, `refreshAllCampaignAnalytics/utils.js:402` build their URLs from it.
 - [ ] M5-fn.2 — `refreshTokens/influencer.js` gains the Instagram half: for `api_path === "instagram"` with `access_token_expires_at` within 30 days, `GET {IG host}/refresh_access_token?grant_type=ig_refresh_token&access_token=…`, writing `access_token`, `access_token_expires_at`, `last_error: null`; 190 → `last_error`.
 - [ ] Functions PR B (M5-fn) against `dev` from a fresh worktree off the merged base; deploy before server PR B in each environment; `refreshAllCampaignAnalytics` last, after a `campaign_id`-scoped dry run.
@@ -72,6 +72,10 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
   Consequence: the first task of M3-fn is `gcloud functions describe` per function per data project, recorded (names only, no values) under `Artifacts and Notes`; the deploy commands in `Concrete Steps` are written against those facts once known, and the README gains a *Legacy function deploy* section so the next person does not rediscover it (D3).
 - Observation: `refreshInstagramRates` already scans `users` in key batches of 100 with a per-user try/catch and `?user_id=` (`instagram.js:7-8, 59-60, 128-139`); `refreshTokens` already batches by key (`influencer.js:15-31`) — so the TRD's "as `refreshTokens` does" pattern for the TikTok rate rewrite has two in-repo precedents, and the better one is `refreshInstagramRates` (it also awaits the batch before responding).
 - Observation: the three Instagram data functions still hard-code `https://graph.facebook.com/v24.0/…` as string literals rather than reading an env URL (`refreshInstagramRates/instagram.js:159`, `updateInstagramDemographics/instagram.js:40-43`, `processInstagramComments/instagram.js:49`, `refreshAllCampaignAnalytics/utils.js:402`), unlike the server, which reads `FACEBOOK_GRAPH_API_URL`. The host helper (D2) is the first place the host is a value.
+
+
+- Observation (2026-10-15): the dev-hosted demographics bundle targets production too, beyond the TRD's analytics warning. P9 source inspection found `PRODEV` selects `firebase_connect`, the bundled key's `project_id` is `crafted-v1`, and byte-identical `firebase_connect.js` uses the production database URL. No deployed function was invoked and no production database read occurred. Reported to the orchestrator; README prohibits dev execution against that bundle. This does not widen PR A's code scope.
+- Observation: deployed names are folder names, while entry points use the longer handler names. All six are Gen2/us-central1; Instagram rates is nodejs22 and the others are nodejs20. The default gcloud project is unset; every live read used `--project=crafted-dev-v1`. The plan's `.keys()` gcloud formatter is unsupported; metadata JSON was sanitized in memory to env names only.
 
 
 ## Decision Log
@@ -94,6 +98,8 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 - Decision: user rulings on the plan review, 2026-10-15 (Gustavo): PR cadence approved (functions PR A, then B from a fresh worktree after A merges); BD-4 approved — the two copied `.js` helpers (`graphHost.js`, `socialErrors.js`, at most ~20 lines each) are allowed in the legacy folders as the explicit exception to the TypeScript rule, because those folders have no TS build and adding one is out of scope.
 
+- Decision: D6 — retain typed deterministic regression coverage in one standalone Node/VM test, without production mock-env switches. The legacy standalone deployment shape is unchanged. Five tests exercise token errors/success, zero-history rates, formulas, paging/concurrency and Meta media/insights errors. Real-vendor token rotation remains a separate operator F-FN gate. Date/Author: 2026-10-15, Cloud Engineer.
+
 ### Blocking decisions
 
 Work starts on the defaults; "all defaults stand" is a complete answer. None blocks M3-fn's code; P5 (secret rotation) gates M3-fn's deploy, and the server's P3 / P4 gate nothing here.
@@ -108,7 +114,7 @@ Work starts on the defaults; "all defaults stand" is a complete answer. None blo
 
 ## Outcomes & Retrospective
 
-M3-fn.1 implements atomic TikTok token rotation and scoped reads. Syntax and behavioral evidence, final integrated gates, review and PR remain in progress. P5 is a deployment gate only; no rotation or deploy was performed.
+Functions PR A implements all three M3-fn milestones: atomic rotated TikTok tokens, awaited key-paged TikTok rates, and Instagram reconnect-error persistence with rate-limit suppression. Six syntax checks, strict TypeScript verification of the standalone regression file, five deterministic tests, all four required root gates, and scoped dev Firebase write/readback passed. Real-vendor F-FN remains unverified until P5 and operator deployment; review and PR publication remain. No rotation or deployment was performed. M5-fn is untouched.
 
 
 ## Context and Orientation
@@ -163,9 +169,9 @@ Before the first edit:
     git fetch origin
     git ls-remote --heads origin feature/creator-onboarding-ig-login
     gh pr list --state all --head feature/creator-onboarding-ig-login
-    gcloud config get-value project                      # must be the dev data project before any describe
-    for f in refreshTiktokAccessTokens refreshTiktokRatesForAllAccounts refreshInstagramRates fetchAndUpdateInstagramDemographics processInstagramComments refreshAllCampaignAnalytics; do gcloud functions describe "$f" --format='value(name,environment,serviceConfig.runtime,buildConfig.entryPoint,serviceConfig.environmentVariables.keys())'; done
-    gcloud scheduler jobs list                            # cadence (BD-3) and whether any job targets a server route (BD-2)
+    gcloud config get-value project                      # unset locally; use explicit --project=crafted-dev-v1
+    for f in refreshTokens refreshTikTokRates refreshInstagramRates updateInstagramDemographics processInstagramComments refreshAllCampaignAnalytics; do gcloud functions describe "$f" --project=crafted-dev-v1 --region=us-central1 --format='value(name,environment,buildConfig.runtime,buildConfig.entryPoint)'; done
+    gcloud scheduler jobs list --project=crafted-dev-v1 --location=us-central1 --format='table(name,schedule,timeZone,httpTarget.uri,state)'
 
 Expected: six functions found (or their real deployed names recorded if they differ); env var **names** and the schedule recorded under `Artifacts and Notes`; no scheduler job targets `/api/influencers/instagram/*` on the server.
 
@@ -191,7 +197,7 @@ Expected after M3-fn.1: `refresh_token_present: true`, both expiries in the futu
 
 Deploy (operator, per data project, user-authorized; exact flags from the `describe` output — the legacy functions keep whatever generation, region and runtime they have today):
 
-    gcloud functions deploy refreshTiktokAccessTokens --source=functions/refreshTokens --entry-point=refreshTiktokAccessTokens --set-env-vars=PRODEV=…,TIKTOK_CLIENT_KEY=…,TIKTOK_CLIENT_SECRET=… <region/runtime/trigger flags as described>
+    gcloud functions deploy refreshTokens --project=crafted-dev-v1 --region=us-central1 --gen2 --runtime=nodejs20 --source=functions/refreshTokens --entry-point=refreshTiktokAccessTokens --trigger-http --env-vars-file=/private/path/refreshTokens-dev.yaml
 
 and the same for the other five, `refreshAllCampaignAnalytics` last. Record `gcloud functions describe` after each deploy (names only).
 
@@ -200,14 +206,14 @@ PR A and PR B: stage explicit paths, commit per function with `Progress` updated
 
 ## Validation and Acceptance
 
-There is no unit-test harness for the legacy functions (no CI, no shared tooling), so acceptance is F-FN: `node --check` on every edited file, plus the scoped dry runs above with the written nodes read back, recorded under `Artifacts and Notes` with the run tag, the command, the function's folder digest (`git rev-parse HEAD` + `git status --porcelain -- functions/<name>`), the Node version, and the measured duration. Behaviour a human can verify on dev:
+There is no shared legacy test harness or CI. PR A adds one dependency-free typed Node/VM regression file, `maintenance/creatorOnboardingFunctions.test.ts`, with strict `tsc` and Node commands in the README. Production code gains no mock env hook; vendor and Firebase doubles are injected only in this isolated test. Real-vendor acceptance remains F-FN: `node --check` on every edited file, plus the scoped dry runs above with the written nodes read back, recorded under `Artifacts and Notes` with the run tag, the command, the function's folder digest (`git rev-parse HEAD` + `git status --porcelain -- functions/<name>`), the Node version, and the measured duration. Behaviour a human can verify on dev:
 
 - A creator with a TikTok `access_token` and no `performance` node gets a rate after one scoped call, and the call returns after the write (`processed: 1` in the body; the node read shows `updated` later than the request start).
 - The rotated TikTok `refresh_token` is persisted; a second scoped call succeeds with the new one.
 - A forced `invalid_grant` writes `last_error` with `tt_invalid_grant` and leaves the token fields untouched; the next good run writes `last_error: null`.
-- `refreshInstagramRates` on a creator whose token Meta rejects with 190 writes `last_error` with `ig_190_<subcode>`; a mocked 4 / 17 / 32 (a run-tagged creator with a token that trips the user-level limit is not reproducible on demand, so this case is verified by reading the branch in the diff and by a local run with the Meta call stubbed through an `INSTAGRAM_MOCK_ERROR_CODE` env that exists only when `NODE_ENV !== "production"`) writes nothing.
+- `refreshInstagramRates` on a creator whose token Meta rejects with 190 writes `last_error` with `ig_190_<subcode>`; a mocked 4 / 17 / 32 (a run-tagged creator with a token that trips the user-level limit is not reproducible on demand, so this case is verified by reading the branch in the diff and by the typed Node/VM test injecting synthetic Meta responses at both media and insights boundaries) writes nothing.
 - With `api_path: "instagram"`, every logged Graph URL is `graph.instagram.com`; without it, `graph.facebook.com`.
-- `grep -rn "@supabase\|SUPABASE_" functions/` is empty; `grep -rn "357014f753c08457f74c0e3115a2c3c1\|awdpgd7ih1asm72a" .` is empty after M3-fn.1 (the committed secret is gone from the tree; the history is handled by P5's rotation, not a rewrite).
+- `grep -rn "@supabase\|SUPABASE_" functions/` is empty; `grep -nE 'client_(key|secret): "' functions/refreshTokens/influencer.js` is empty after M3-fn.1 (the committed secret is gone from the tree; the history is handled by P5's rotation, not a rewrite).
 
 A behaviour not demonstrated by a scoped run and a node read-back is not a verified behaviour; the review checks the transcripts, not the summary.
 
@@ -219,7 +225,19 @@ Every function is a scheduled refresh that overwrites the same fields on each ru
 
 ## Artifacts and Notes
 
-To be filled as work proceeds: the `gcloud functions describe` facts per function (names only), the scheduler cadence (BD-3), the OS2 counts, each dry run's transcript and node read-back, the deploy transcripts, the PR numbers.
+2026-10-15 preflight: `gcloud functions list --project=crafted-dev-v1` found all six functions. `gcloud functions describe <deployed-name> --project=crafted-dev-v1 --region=us-central1 --format=json` was parsed privately, emitting name/generation/runtime/entryPoint/source and environment variable names only. All six env-name lists contain only `LOG_EXECUTION_ID`. Exact hosting facts and scheduler cron/time zones are in README `Legacy social-function deployment`. Six social schedulers call functions directly; an unrelated existing traffic-click scheduler calls the production server and was never invoked.
+
+P9: downloaded the deployed demographics ZIP privately. `instagram.js`, `index.js`, and `firebase_connect.js` are byte-identical; the implementation SHA-256 is `698e2a1e3b744d6dc2d3cbaac973f5633163abde28c2f319d5183a4ddc3d8b02`. The only package.json difference is absence of the local `dev` script in the deployed version. The hardcoded uid gate is absent. No secret values were emitted. The production credential/URL finding is recorded above.
+
+P13: Node read-only key pages of 100 using the server's private `.env.dev`, rejecting any service-account project other than `crafted-dev-v1`, returned `{ users: 222, tiktokConnected: 19, durationMs: 6067 }`. Default batch 100 / five concurrent TikTok calls retained.
+
+Verification environment: Node v22.22.0, npm 10.9.4, isolated `npm ci --ignore-scripts --no-audit --no-fund` (665 packages, no lockfile change). Root package-lock SHA-256 `7e7134ecef7c92e17beee979b1a4eebbda6c6b44b3395d09befd2af48c9b7f3e`; installed node_modules/.package-lock SHA-256 `3d0ef0b7eb6de37611b0ab1d92b2ef1be153b35d2b6fe674af6af056f63a3eb0`. Root gates used `NX_DAEMON=false NX_ISOLATE_PLUGINS=false CI=true`; no Firebase/schema/vendor inputs, creator-outreach imports mocked by its own suite. Standalone test injects every external module and uses synthetic env/vendor/Firebase values; schema not applicable.
+
+Measured successful commands from this worktree, exit 0 throughout: `node --check functions/refreshTokens/influencer.js` 32 ms; TikTok rates 23 ms; Instagram rates 25 ms; corresponding copied socialErrors.js 28/18/19 ms. `node_modules/.bin/tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --types node --skipLibCheck maintenance/creatorOnboardingFunctions.test.ts` 792 ms. `node --experimental-strip-types --test maintenance/creatorOnboardingFunctions.test.ts` 300 ms, 5 tests passed / 0 failed. `npm run check:ci` 5315 ms; `npm run typecheck` 3232 ms; `npm run test:ci` 2066 ms, 4 test files / 33 tests passed; `npm run build` 4434 ms. Root commands cover creator-outreach only; standalone checks cover this PR's legacy code. Raw sanitized outputs and command records are local `/tmp/creator-onboarding-functions-check-{0..11}.log` and `/tmp/creator-onboarding-functions-checks.json`. After adding the mixed-batch network-failure assertion and formatting the standalone test, only its strict-tsc and test commands were rerun; their final outputs are `/tmp/creator-onboarding-functions-final-{0..1}.log`. Unchanged production-code syntax and creator-outreach gates are reused at their original measured durations. One initial VM assertion failed because cross-realm objects have different prototypes; structured cloning fixed the test boundary. An initial strict-tsc narrowing error was corrected with a typed object guard before the recorded pass.
+
+Scoped storage evidence: an isolated Node/VM invocation injected the real Firebase Admin app validated as `crafted-dev-v1`, synthetic vendor responses and synthetic tokens. Run tag `agent-creator-onboarding-1792074909103`; all calls carried `query.user_id` equal to the owned tag. Rotation produced the new refresh token and future expiries before response; TikTok zero-history produced `processed: 1`, followerCount 12 and suggestedRate 0 before response; subsequent invalid_grant changed only last_error. Readbacks passed in 2027 ms, then the owned users/{run-tag} node was removed and absence verified. No existing creator was modified. Firebase connection used the dev database URL and private server `.env.dev` credential; no Supabase identity was created. These are real-storage / synthetic-vendor checks, not real TikTok F-FN. Two real-vendor successful rotations and real forced vendor errors remain unverified; P5 credentials/deployment are not present and no secret was rotated.
+
+Applicable code identities at successful verification: token implementation `fb106baf324c6202bce9041f3ff57d96e38f1fad83b29244f0365046661a8f8e`; TikTok rates `ab500138d60ece90372efd29d641fd9e9f60373f44bd75c0305eebd9db2c1b01`; Instagram rates `cf9e821655e3c92e07e45d188221c0d16ce79e4de76e2d8d637d0910b72976d4`; regression test `6e7bce621864a710693bd27b0e058a3110040de2e9098351f4cba230d5d414d4`. Identical copied helper content is versioned alongside them. README/plan-only updates do not invalidate these code-bound checks.
 
 
 ## Interfaces and Dependencies
@@ -260,3 +278,8 @@ Recorded the user's plan-review rulings in the Decision Log (PR cadence, BD-4 `.
 ## Revision note 3 — 2026-10-15, Cloud Engineer
 
 Implementation authorization recorded, TRD v1.1 and contract revision 2 rechecked (the Firebase contract is unchanged), M3-fn.1 implemented. Preflight discovered the live names match folder names, not HTTP entry points; details and verification follow in Artifacts and Notes.
+
+
+## Revision note 4 — 2026-10-15, Cloud Engineer
+
+Completed M3-fn.2/.3, recorded all preflight findings and measured check identities, added typed regression coverage and README operator instructions, and distinguished real-storage synthetic-vendor evidence from unavailable real-vendor F-FN. The demographics production target is a new load-bearing finding reported to the user via the orchestrator; no deployment is attempted.
