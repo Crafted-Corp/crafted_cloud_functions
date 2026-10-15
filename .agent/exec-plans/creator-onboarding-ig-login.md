@@ -34,7 +34,7 @@ How to see each working is in `Validation and Acceptance`.
 - No Instagram-login backfill, no `api_path` write by a function (the server's connect paths own it; absent means `"facebook"`).
 - No change to the rate formulas themselves (Decision 1 / 2 keep the stored suggested rates as they are computed today).
 - No deletion of the Facebook-host code path: it remains the live path for every Facebook-path creator (D-LEGACY-FB).
-- No run against the prod data project from an agent; dev only, and `refreshAllCampaignAnalytics` only with an explicit `campaign_id` because its dev deployment reads prod RTDB (TRD R-6).
+- No run against the prod data project from an agent. Do not invoke the dev-hosted `refreshAllCampaignAnalytics` or `updateInstagramDemographics` deployments while they target production, regardless of query scope. Operator validation requires an explicitly verified permitted data target.
 
 What goes wrong if someone helpfully does one anyway: a function writing `api_path` would route a Facebook-issued token at `graph.instagram.com`, where every call fails and the creator gets a reconnect bar they cannot clear without the flag; a backoff loop inside a scheduled function extends its runtime past the execution limit and drops the rest of the batch.
 
@@ -55,6 +55,7 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 - [x] (2026-10-15) M3-fn.1 code — `refreshTokens/influencer.js`: env-sourced TikTok credentials; persist the rotated `refresh_token` plus both expiries and `last_error: null` in one `.update()`; `last_error` on `invalid_grant` / `10010`; `?user_id=` scope.
 - [x] (2026-10-15) M3-fn.2 code — `refreshTikTokRates/influencer.js` rewrite in place: key-batched scan of `users` (the `refreshTokens` pattern), select by `creator_socials/tiktok/access_token`, skip `negotiated`, per-user try/catch, await every batch before responding, write `performance` + `updated` + `last_error: null`, `last_error` on 2190008 / 2190002 / 2190003 / 10010; `?user_id=` scope.
 - [x] (2026-10-15) M3-fn.3 code — `refreshInstagramRates/instagram.js`: `last_error` on 190 / 102 / 10 / 200 and `null` on success; 4 / 17 / 32 logged only (T17). (Host routing is M5-fn.)
+- [x] (2026-10-15) Functions PR A combined technical review: GO after targeted plan guard corrections; implementation/test identities match recorded successful checks. Real-vendor verification remains an operator gate.
 - [ ] Functions PR A (M3-fn) against `dev`; F-FN evidence recorded; one tech-lead review of this PR’s full combined diff. Deploy to dev data project (user-authorized), then staging, then prod, each before the matching server deploy.
 - [ ] M5-fn.1 — a shared host-selection helper copied into each function folder (see D2): `graphHostFor(instagramNode)`; `refreshInstagramRates/instagram.js:159, :188`, `updateInstagramDemographics/instagram.js:40-43`, `processInstagramComments/instagram.js:49`, `refreshAllCampaignAnalytics/utils.js:402` build their URLs from it.
 - [ ] M5-fn.2 — `refreshTokens/influencer.js` gains the Instagram half: for `api_path === "instagram"` with `access_token_expires_at` within 30 days, `GET {IG host}/refresh_access_token?grant_type=ig_refresh_token&access_token=…`, writing `access_token`, `access_token_expires_at`, `last_error: null`; 190 → `last_error`.
@@ -108,7 +109,7 @@ Work starts on the defaults; "all defaults stand" is a complete answer. None blo
 - BD-2 — OQ-D5, schedulers calling the server's `refreshAll` / `demographics` / `comments` routes without a bearer. Default: none (Cloud Scheduler targets these functions directly, not the server); confirmed by listing Cloud Scheduler jobs in the dev project during the first task. Reported to the server plan (its BD-6). Owner: cloud builder.
 - BD-3 — OQ-W13, the refresh cadence written down. Default: the cadence is read from the Cloud Scheduler jobs during the first task and recorded in the README section (D3), so the client's "as of the last refresh" copy can name it later. Owner: cloud builder.
 - BD-4 — The two copied helper files (`graphHost.js`, `socialErrors.js`) are new `.js` files inside legacy folders that have no TypeScript build. Default: allowed as the documented exception, each ≤ 20 lines, because the alternative is inlining the same five lines in six places. If the user refuses, the helper is inlined per file and the plan notes the duplication as debt. Stops M5-fn.1 if refused. Owner: Gustavo.
-- BD-5 — P9, the deployed `updateInstagramDemographics` matches the code. Default: verified by diffing the deployed source bundle against the folder; if it differs, the first M3-fn deploy of that function is the fix and nothing else changes. Owner: cloud builder.
+- BD-5 — P9 verified the deployed `updateInstagramDemographics` implementation matches the repository. Its deployed Firebase target is production, so it must not be invoked for dev validation. This function is outside PR A deployment scope; the finding and operator guard are recorded in the README. Owner: cloud builder.
 - BD-6 — Instagram long-lived refresh window. Default: refresh when `access_token_expires_at` is within 30 days (TRD §5.6), skipping nodes with no `access_token_expires_at` (Facebook-path tokens are not refreshable this way). Owner: cloud builder.
 
 
@@ -193,7 +194,7 @@ Then read the written node (never the whole collection):
 
 Expected after M3-fn.1: `refresh_token_present: true`, both expiries in the future, `last_error: null`. Repeat with a run-tagged creator holding a deliberately corrupted `refresh_token`: `last_error.message_key === "tt_invalid_grant"` and the other fields unchanged. After M3-fn.2 (`refreshTikTokRates`), a creator with no prior `performance` node shows `performance.suggestedRate` (a number, possibly 0), `updated` and `last_error: null`, and the HTTP response's `processed` count is 1. After M5-fn.1, with a run-tagged creator whose node carries `api_path: "instagram"` and an Instagram-Login token obtained through the server's dev M5 flow, `refreshInstagramRates?user_id=<uid>` logs an `https://graph.instagram.com/v24.0/…` URL and writes `suggested_rate`; the same creator with `api_path` removed logs `graph.facebook.com`.
 
-`refreshAllCampaignAnalytics` (reads prod RTDB from dev): only `curl -s "http://localhost:8080/?campaign_id=<run-tagged dev campaign>"`, never unscoped from an agent.
+Do not invoke the dev-hosted `refreshAllCampaignAnalytics` or `updateInstagramDemographics` deployments from an agent while their target is production, even with a scoped query. Later operator validation requires an explicitly verified permitted data target and the appropriate `campaign_id` or `user_id` scope.
 
 Deploy (operator, per data project, user-authorized; exact flags from the `describe` output — the legacy functions keep whatever generation, region and runtime they have today):
 
@@ -283,3 +284,8 @@ Implementation authorization recorded, TRD v1.1 and contract revision 2 rechecke
 ## Revision note 4 — 2026-10-15, Cloud Engineer
 
 Completed M3-fn.2/.3, recorded all preflight findings and measured check identities, added typed regression coverage and README operator instructions, and distinguished real-storage synthetic-vendor evidence from unavailable real-vendor F-FN. The demographics production target is a new load-bearing finding reported to the user via the orchestrator; no deployment is attempted.
+
+
+## Revision note 5 — 2026-10-15, Tech Lead
+
+Combined PR A technical review found no implementation blocker. Corrected stale plan instructions that permitted scoped invocation of a production-backed deployment and implied demographics belonged to PR A deployment. README guards and implementation/check identities are unchanged; real-vendor verification remains pending P5.
