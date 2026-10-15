@@ -1,184 +1,104 @@
 require("dotenv").config();
-const moment = require("moment");
 const firebase = require(process.env.PRODEV);
-const FB = require("facebook-node-sdk");
-const { constrainedMemory } = require("process");
-const appId = process.env.APP_ID;
-const appSecret = process.env.APP_SECRET;
-const fb = new FB({ appId, appSecret });
 const cors = require("cors")({ origin: true });
+const { tiktokMessageKey, lastErrorFor } = require("./socialErrors");
 
-const refreshTiktokRatesForAllAccounts = (req, res) => {
-  cors(req, res, async () => {
-    const usersRef = firebase.database().ref("users");
-    usersRef
-      .orderByChild("creator_socials/tiktok/performance/suggestedRate")
-      .startAt(null)
-      .once("value")
-      .then((snapshot) => {
-        snapshot.forEach((userSnapshot) => {
-          const userId = userSnapshot.key;
-          //console.log(userId);
-          const tikTokInfo = userSnapshot
-            .child("creator_socials/tiktok/performance/suggestedRate")
-            .val();
-
-          if (tikTokInfo) {
-            try {
-              getSuggestedRateTikTok(userId);
-            } catch (error) {
-              console.error(
-                "Error fetching and calculating video data:",
-                error,
-              );
-            }
-          }
-        });
-        console.log("Suggested rates updated succesfully");
-        res
-          .status(200)
-          .json({ message: "Suggested rates updated succesfully" });
-      })
-      .catch((error) => {
-        console.error("Error fetching users:", error);
-        res.status(500).json({ message: "Error updating suggested rates" });
-      });
-  });
+const median = (values) => {
+  if (values.length === 0) return 0;
+  const sorted = values.sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 };
 
-const getSuggestedRateTikTok = async (userId) => {
+const getSuggestedRateTikTok = async (userId, user) => {
+  const social = user?.creator_socials?.tiktok;
+  const token = social?.access_token;
+  if (user?.negotiated === true || typeof token !== "string" || !token || token === "null") return "skipped";
   try {
-    const creator_id = userId;
-    const snapshot = await firebase
-      .database()
-      .ref(`users/${creator_id}/creator_socials/tiktok/access_token`)
-      .once("value");
-    const accessToken = snapshot.val();
-
-    const userInfoHeaders = {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
-
-    // Fetch user info data to get the follower count
-    const userInfoResponse = await fetch(
-      "https://open.tiktokapis.com/v2/user/info/?fields=follower_count",
-      { method: "GET", headers: userInfoHeaders },
-    );
-    const userData = await userInfoResponse.json();
-    const followerCount = userData.data.user.follower_count || 0;
-
-    const videoListHeaders = {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
-
-    const videoListBody = JSON.stringify({
-      max_count: 20,
-    });
-
-    const videoListOptions = {
-      method: "POST",
-      headers: videoListHeaders,
-      body: videoListBody,
-    };
-
-    // Fetch video list data
-    const videoListResponse = await fetch(
-      "https://open.tiktokapis.com/v2/video/list/?fields=like_count,share_count,view_count,comment_count,share_url",
-      videoListOptions,
-    );
-    const videoListData = await videoListResponse.json();
-    const videos = videoListData.data.videos;
-    if (videos) {
-      const firstVideo = videos[0];
-      const shareUrl = firstVideo.share_url;
-      const handle = shareUrl.split("@")[1].split("/")[0];
-
-      // Store the username in Firebase
-      await firebase
-        .database()
-        .ref(`users/${creator_id}/creator_socials/tiktok/handle`)
-        .set(handle);
-    }
-    // Calculate total engagement metrics
-    let totalLikeCount = 0;
-    let totalShareCount = 0;
-    let totalViewCount = 0;
-    let totalCommentCount = 0;
-
-    let likeArray = [];
-    let shareArray = [];
-    let viewArray = [];
-    let commentArray = [];
-
-    for (const video of videos) {
-      likeArray.push(video.like_count);
-      shareArray.push(video.share_count);
-      viewArray.push(video.view_count);
-      commentArray.push(video.comment_count);
-    }
-
-    const views_sorted_array = viewArray.sort((a, b) => a - b);
-    function median(arr) {
-      let mid = Math.floor(arr.length / 2);
-      let sortedArr = arr.sort((a, b) => a - b);
-      if (arr.length % 2 === 0) {
-        return (sortedArr[mid - 1] + sortedArr[mid]) / 2;
-      } else {
-        return sortedArr[mid];
+    const node = firebase.database().ref(`users/${userId}/creator_socials/tiktok`);
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    const readResponse = async (response) => {
+      const data = await response.json();
+      const code = data.error?.code;
+      const messageKey = tiktokMessageKey(code);
+      if (messageKey) {
+        await node.update({ last_error: lastErrorFor(code, undefined, messageKey) });
+        return null;
       }
-    }
-    const median_views = median(viewArray);
-    const median_likes = median(likeArray);
-    const median_shares = median(shareArray);
-    const median_comments = median(commentArray);
-
-    const videoCount = videos.length;
-
-    /*Calculate average engagement metrics
-        const avg10_likes = parseFloat((totalLikeCount / videoCount).toFixed(2));
-        const avg10_shares  = parseFloat((totalShareCount / videoCount).toFixed(2));
-        const avg10_views = parseFloat((totalViewCount / videoCount).toFixed(2));
-        const avg10_comments = parseFloat((totalCommentCount / videoCount).toFixed(2));
-        */
-    // Calculate suggested rate formula
-    let suggestedRate = (median_views / 1000) * 2500;
-    console.log("suggested rate: " + suggestedRate);
-    console.log("avg10_likes: " + median_likes);
-    console.log("avg10_shares: " + median_shares);
-    console.log("avg10_comments: " + median_comments);
-    console.log("followerCount by 1000: " + followerCount / 1000);
-    const updated = moment().format();
-
-    // Store data in Firebase
-    if (!suggestedRate) {
-      console.error(
-        `Failed to calculate a suggested rate for creator ${creator_id}`,
-      );
-      return null;
-    }
-
-    await firebase
-      .database()
-      .ref(`users/${creator_id}/creator_socials/tiktok/performance`)
-      .set({
-        median_likes,
-        median_shares,
-        followerCount,
-        median_views,
-        median_comments,
-        suggestedRate,
-        updated,
-      });
-
-    //res.status(200).json({ status: "200", statuscode: "1", result: { median_likes, median_shares, median_views, median_comments, followerCount, suggestedRate, updated } });
-  } catch (error) {
-    console.error("Error fetching and calculating video data:", error);
-    // res.status(500).json({ status: "500", statuscode: "-1", result: error });
+      if (!response.ok || (code !== undefined && code !== "ok" && code !== 0)) {
+        throw new Error("TikTok request failed");
+      }
+      return data;
+    };
+    const userData = await readResponse(await fetch(
+      "https://open.tiktokapis.com/v2/user/info/?fields=follower_count",
+      { method: "GET", headers },
+    ));
+    if (!userData) return "failed";
+    if (!userData.data?.user) throw new Error("TikTok user missing");
+    const followerCount = userData.data.user.follower_count || 0;
+    const videoData = await readResponse(await fetch(
+      "https://open.tiktokapis.com/v2/video/list/?fields=like_count,share_count,view_count,comment_count,share_url",
+      { method: "POST", headers, body: JSON.stringify({ max_count: 20 }) },
+    ));
+    if (!videoData) return "failed";
+    const videos = videoData.data?.videos;
+    if (!Array.isArray(videos)) throw new Error("TikTok video list missing");
+    const median_views = median(videos.map((video) => video.view_count));
+    const median_likes = median(videos.map((video) => video.like_count));
+    const median_shares = median(videos.map((video) => video.share_count));
+    const median_comments = median(videos.map((video) => video.comment_count));
+    const suggestedRate = (median_views / 1000) * 2500;
+    const updated = new Date().toISOString();
+    const handle = videos[0]?.share_url?.match(/@([^/]+)/)?.[1];
+    await node.update({
+      performance: { median_likes, median_shares, followerCount, median_views, median_comments, suggestedRate, updated },
+      updated,
+      last_error: null,
+      ...(handle ? { handle } : {}),
+    });
+    return "processed";
+  } catch {
+    console.error(`[ERROR] Failed processing TikTok rate for user ${userId}`);
+    return "failed";
   }
 };
 
-module.exports = {
-  refreshTiktokRatesForAllAccounts,
+const refreshTiktokRatesForAllAccounts = (req, res) => {
+  cors(req, res, async () => {
+    try {
+      const usersRef = firebase.database().ref("users");
+      const counts = { processed: 0, skipped: 0, failed: 0 };
+      const processBatch = async (keys, users) => {
+        for (let i = 0; i < keys.length; i += 5) {
+          const results = await Promise.all(keys.slice(i, i + 5).map((key) => getSuggestedRateTikTok(key, users[key])));
+          for (const result of results) counts[result] += 1;
+        }
+      };
+      const userId = req.query.user_id;
+      if (userId) {
+        const user = (await usersRef.child(userId).once("value")).val();
+        if (!user) return res.status(404).json({ message: "User not found" });
+        await processBatch([userId], { [userId]: user });
+      } else {
+        let lastKey = null;
+        for (;;) {
+          let query = usersRef.orderByKey().limitToFirst(100);
+          if (lastKey) query = query.startAfter(lastKey);
+          const users = (await query.once("value")).val();
+          const keys = users ? Object.keys(users) : [];
+          if (keys.length === 0) break;
+          await processBatch(keys, users);
+          lastKey = keys[keys.length - 1];
+          if (keys.length < 100) break;
+        }
+      }
+      return res.status(200).json(counts);
+    } catch {
+      console.error("[ERROR] Failed reading users for TikTok rate refresh");
+      return res.status(500).json({ message: "Error updating suggested rates" });
+    }
+  });
 };
+
+module.exports = { refreshTiktokRatesForAllAccounts };
