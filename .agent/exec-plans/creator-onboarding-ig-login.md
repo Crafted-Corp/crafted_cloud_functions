@@ -4,11 +4,11 @@ This ExecPlan is a living document. The sections `Progress`, `Surprises & Discov
 
 `.agent/PLANS.md` in this repository points to the canonical doctrine in the crafted plugin (`skills/exec-plan/references/PLANS.md`); this document is maintained in accordance with it.
 
-This is one of three companion plans built from the FINAL TRD `trds/TRD-creator-onboarding-ig-login.md` (v1.0, 2026-10-15; `trds/` sits at the workspace root `/home/gustavo/dev/crafted/`, outside every repo). The TRD is authoritative for *what*; this plan is authoritative only for *how* in `crafted_cloud_functions/`. The server plan, `server/.agent/exec-plans/creator-onboarding-ig-login.md` (worktree `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server`), owns **every shared contract**, including the Firebase fields these functions read and write; this plan links to it and edits nothing outside this repository. The client plan, `client/.agent/exec-plans/creator-onboarding-ig-login.md`, owns the browser; nothing here is reachable from it.
+This is one of three companion plans built from the FINAL TRD `trds/TRD-creator-onboarding-ig-login.md` (v1.1, 2026-10-15; `trds/` sits at the workspace root `/home/gustavo/dev/crafted/`, outside every repo). The TRD is authoritative for *what*; this plan is authoritative only for *how* in `crafted_cloud_functions/`. The server plan, `server/.agent/exec-plans/creator-onboarding-ig-login.md` (worktree `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server`), owns **every shared contract**, including the Firebase fields these functions read and write; this plan links to it and edits nothing outside this repository. The client plan, `client/.agent/exec-plans/creator-onboarding-ig-login.md`, owns the browser; nothing here is reachable from it.
 
 Worktree: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-crafted_cloud_functions`, branch `feature/creator-onboarding-ig-login`, cut from `origin/dev` at `2c5193d`. All edits happen there; never on `dev` or `main`. `wt-new` does not cover this repository, so the worktree was created manually; each legacy function has its own `node_modules` (`cd functions/<name> && npm install`).
 
-Authorization state: **planning only.** The user reviews the three plans before any milestone starts. Implementation is delegated to `crafted:cloud-engineer` under the delivery pipeline, with one tech-lead review of the combined diff across the three repos per PR. The cloud engineer also owns the operator steps this plan names (secret rotation, function env, deploys), each run only when the user authorizes it.
+Authorization state: **implementation authorized on 2026-10-15.** Functions PR A is in progress; deployment and P5 secret rotation remain operator-only. Implementation is delegated to `crafted:cloud-engineer` under the delivery pipeline, with one tech-lead review of the combined diff across the three repos per PR. The cloud engineer also owns the operator steps this plan names (secret rotation, function env, deploys), each run only when the user authorizes it.
 
 
 ## Purpose / Big Picture
@@ -41,7 +41,7 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 ## The cross-repo contract
 
-[Authoritative contract](server/.agent/exec-plans/creator-onboarding-ig-login.md#the-cross-repo-contract) — in the server repository at `server/.agent/exec-plans/creator-onboarding-ig-login.md` (while the branches are unmerged: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server/.agent/exec-plans/creator-onboarding-ig-login.md`), section `The cross-repo contract`, **revision 1 (2026-10-15)**, subsection *Firebase fields shared with the cloud functions*. This plan relies on: `users/{uid}/creator_socials/instagram/api_path` (`"facebook"` | `"instagram"`, absent = Facebook) selecting `graph.facebook.com/v24.0` vs `graph.instagram.com/v24.0`; `users/{uid}/creator_socials/instagram/{instagram_user_id, access_token_expires_at}` written by the server's Instagram Login path; the `last_error` shape `{ code, subcode?, message_key, at } | null` and its `message_key` catalogue (`ig_190_460`, `ig_190_463`, `ig_190_467`, `ig_190_458`, `ig_190_459`, `ig_190`, `ig_102`, `ig_10`, `ig_200`, `tt_2190002`, `tt_2190003`, `tt_2190008`, `tt_10010`, `tt_invalid_grant`); the rule that every successful connect or refresh writes `last_error: null`; `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` as the function env names; and the deploy order (functions first in each environment, before the server, because an absent `api_path` means the Facebook host). A change there stops M3-fn or M5-fn until these fields are re-checked.
+[Authoritative contract](server/.agent/exec-plans/creator-onboarding-ig-login.md#the-cross-repo-contract) — in the server repository at `server/.agent/exec-plans/creator-onboarding-ig-login.md` (while the branches are unmerged: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server/.agent/exec-plans/creator-onboarding-ig-login.md`), section `The cross-repo contract`, **revision 2 (2026-10-15)**, subsection *Firebase fields shared with the cloud functions*. This plan relies on: `users/{uid}/creator_socials/instagram/api_path` (`"facebook"` | `"instagram"`, absent = Facebook) selecting `graph.facebook.com/v24.0` vs `graph.instagram.com/v24.0`; `users/{uid}/creator_socials/instagram/{instagram_user_id, access_token_expires_at}` written by the server's Instagram Login path; the `last_error` shape `{ code, subcode?, message_key, at } | null` and its `message_key` catalogue (`ig_190_460`, `ig_190_463`, `ig_190_467`, `ig_190_458`, `ig_190_459`, `ig_190`, `ig_102`, `ig_10`, `ig_200`, `tt_2190002`, `tt_2190003`, `tt_2190008`, `tt_10010`, `tt_invalid_grant`); the rule that every successful connect or refresh writes `last_error: null`; `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` as the function env names; and the deploy order (functions first in each environment, before the server, because an absent `api_path` means the Facebook host). A change there stops M3-fn or M5-fn until these fields are re-checked.
 
 
 ## Progress
@@ -52,7 +52,7 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 - [ ] P5 (operator, user-authorized) — rotate the committed TikTok client secret in the TikTok developer console; set `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` on the `refreshTiktokAccessTokens` function env per data project. The old secret is dead the moment the new one is issued, so this step and the M3-fn deploy of `refreshTokens` happen in one sitting.
 - [ ] P13 (OS2 probe) — count dev creators with `creator_socials/tiktok/access_token` present (read-only shallow scan); record the number as the batch-size basis.
 - [ ] P9 — confirm the deployed `updateInstagramDemographics` matches the code (no hardcoded uid gate): `gcloud functions describe` + a diff of the deployed source against `functions/updateInstagramDemographics/`.
-- [ ] M3-fn.1 — `refreshTokens/influencer.js`: env-sourced TikTok credentials; persist the rotated `refresh_token` plus both expiries and `last_error: null` in one `.update()`; `last_error` on `invalid_grant` / `10010`; `?user_id=` scope.
+- [x] (2026-10-15) M3-fn.1 code — `refreshTokens/influencer.js`: env-sourced TikTok credentials; persist the rotated `refresh_token` plus both expiries and `last_error: null` in one `.update()`; `last_error` on `invalid_grant` / `10010`; `?user_id=` scope.
 - [ ] M3-fn.2 — `refreshTikTokRates/influencer.js` rewrite in place: key-batched scan of `users` (the `refreshTokens` pattern), select by `creator_socials/tiktok/access_token`, skip `negotiated`, per-user try/catch, await every batch before responding, write `performance` + `updated` + `last_error: null`, `last_error` on 2190008 / 2190002 / 2190003 / 10010; `?user_id=` scope.
 - [ ] M3-fn.3 — `refreshInstagramRates/instagram.js`: `last_error` on 190 / 102 / 10 / 200 and `null` on success; 4 / 17 / 32 logged only (T17). (Host routing is M5-fn.)
 - [ ] Functions PR A (M3-fn) against `dev`; F-FN evidence recorded; tech-lead review with server PR A and client PR 2. Deploy to dev data project (user-authorized), then staging, then prod, each before the matching server deploy.
@@ -108,7 +108,7 @@ Work starts on the defaults; "all defaults stand" is a complete answer. None blo
 
 ## Outcomes & Retrospective
 
-Nothing delivered yet. Written at the end of functions PR A and PR B against `Purpose / Big Picture`.
+M3-fn.1 implements atomic TikTok token rotation and scoped reads. Syntax and behavioral evidence, final integrated gates, review and PR remain in progress. P5 is a deployment gate only; no rotation or deploy was performed.
 
 
 ## Context and Orientation
@@ -255,3 +255,8 @@ Initial authoring from TRD v1.0 FINAL. Sections touched: all. Why: the user requ
 ## Revision note 2 — 2026-10-15, orchestrator
 
 Recorded the user's plan-review rulings in the Decision Log (PR cadence, BD-4 `.js` helpers allowed). Sections touched: Decision Log. Why: the user approved the plan with these rulings.
+
+
+## Revision note 3 — 2026-10-15, Cloud Engineer
+
+Implementation authorization recorded, TRD v1.1 and contract revision 2 rechecked (the Firebase contract is unchanged), M3-fn.1 implemented. Preflight discovered the live names match folder names, not HTTP entry points; details and verification follow in Artifacts and Notes.
