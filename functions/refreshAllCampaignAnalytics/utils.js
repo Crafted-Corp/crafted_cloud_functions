@@ -512,13 +512,20 @@ function updateDatabaseWithPerformanceData(
   const newInfluencerTasksRef = influencerTasksRef.push();
   newInfluencerTasksRef.set(performance_data);
 
-  const userInfluencerTasksRef = firebase
-    .database()
-    .ref(
-      `users/${post.creator_id}/influencer_tasks/${post.task_id}/posts/${post.post_id}/performance`,
+  // A deleted creator's posts lose creator_id; writing anyway would create users/undefined.
+  if (post.creator_id) {
+    const userInfluencerTasksRef = firebase
+      .database()
+      .ref(
+        `users/${post.creator_id}/influencer_tasks/${post.task_id}/posts/${post.post_id}/performance`,
+      );
+    const newUserInfluencerTasksRef = userInfluencerTasksRef.push();
+    newUserInfluencerTasksRef.set(performance_data);
+  } else {
+    console.warn(
+      `[WARN] Post ${post.post_id} in campaign ${campaign_id} has no creator_id. Skipping creator performance copy.`,
     );
-  const newUserInfluencerTasksRef = userInfluencerTasksRef.push();
-  newUserInfluencerTasksRef.set(performance_data);
+  }
 
   const brandInfluencerCampaignsRef = firebase
     .database()
