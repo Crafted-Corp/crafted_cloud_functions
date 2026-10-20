@@ -46,6 +46,8 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 ## Progress
 
+- [x] (2026-10-20) Replaced the README delivery narrative with durable operating/configuration/deployment/verification/rollback guidance for all six scheduled social functions; relocated the five-test suite byte-identically to `__tests__/legacySocialFunctions.test.ts`. New-path verification and targeted review are recorded below.
+
 - [x] (2026-10-15) TRD v1.0 FINAL read in full; the function facts the TRD cites re-verified in this worktree at `2c5193d` (see `Surprises & Discoveries`).
 - [x] (2026-10-15) Plan authored; awaiting user review. M0 (the N18 hotfix) is being implemented in the client worktree by a frontend engineer and touches nothing here.
 - [x] (2026-10-15) Before the first edit: `git fetch origin`, `git ls-remote --heads origin feature/creator-onboarding-ig-login`, `gh pr list --state all --head feature/creator-onboarding-ig-login`; `gcloud functions describe` for each of the six functions in the dev data project to record region, entry point, runtime and env (names only), since the legacy deploy procedure is not documented in this repository (see `Surprises & Discoveries`).
@@ -66,6 +68,8 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 ## Surprises & Discoveries
 
+- Observation (2026-10-20): the README embedded temporary PR/deploy stages and dated runtime/schedule observations as operating instructions, and maintained regression coverage was under the one-off `maintenance/` directory. The user requested durable guidance and a root `__tests__/` home. Source inventory confirms only the three token/rate handlers have user_id scope on this branch, both campaign jobs already accept campaign_id, and demographics is unscoped.
+
 - Observation: the TRD's F-FN row and §5.6 ask for `user_id`-scoped dry runs of every function, including `refreshAllCampaignAnalytics`. Only `refreshInstagramRates` reads `req.query.user_id` (`instagram.js:59-60`); `refreshAllCampaignAnalytics` scopes by `req.query.campaign_id` (`campaign.js:16-18`); `refreshTokens`, `refreshTikTokRates`, `updateInstagramDemographics` and `processInstagramComments` accept no scope at all. A dry run as the TRD words it cannot be made on four of the six.
   Evidence: `grep -n "user_id\|campaign_id" functions/*/{influencer,instagram,campaign,utils}.js` → hits only in `refreshInstagramRates/instagram.js:59-60` and `refreshAllCampaignAnalytics/campaign.js:16`.
   Consequence: Decision Log D1 — the two TikTok functions and `updateInstagramDemographics` gain a `?user_id=` scope as part of their edits (a few lines each, in place); `processInstagramComments` and `refreshAllCampaignAnalytics` are scoped by `?campaign_id=` (the latter already is; the former iterates campaigns, so the same key fits). Reported to the user with this plan; not a TRD edit.
@@ -81,6 +85,8 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 
 ## Decision Log
+
+- Decision (2026-10-20, Cloud Engineer): retain source/entry-point/scope/configuration facts in the README and obtain deployment identity/runtime/generation/cadence from explicit per-environment metadata reads. Keep delivery sequencing/history in this ExecPlan. Move the test without modifying its contents; leave all existing one-off maintenance scripts untouched.
 
 - Decision: D1 — Scoping flags. `refreshTiktokAccessTokens`, `refreshTiktokRatesForAllAccounts` and `fetchAndUpdateInstagramDemographics` gain `?user_id=<uid>` (process only that user, 404 when the user has no node, same response shape otherwise); `processInstagramComments` gains `?campaign_id=`; `refreshAllCampaignAnalytics` keeps its existing `?campaign_id=`. The F-FN dry runs use these scopes against run-tagged dev records.
   Rationale: see the first `Surprises & Discoveries` entry; an unscoped run against dev touches every dev creator's node, which is not a dry run, and `refreshAllCampaignAnalytics` on dev reads prod RTDB (TRD R-6).
@@ -115,6 +121,8 @@ Work starts on the defaults; "all defaults stand" is a complete answer. None blo
 
 
 ## Outcomes & Retrospective
+
+2026-10-20 correction: the README now describes ongoing operation of all six scheduled social functions without PR labels or dated deployment snapshots. The five production regression cases live under root `__tests__/`, byte-identical to the original suite. No production source, query behavior, timeout, API or one-off maintenance script changed. No cloud command was run.
 
 Functions PR A implements all three M3-fn milestones: atomic rotated TikTok tokens, awaited key-paged TikTok rates, and Instagram reconnect-error persistence with rate-limit suppression. Six syntax checks, strict TypeScript verification of the standalone regression file, five deterministic tests, all four required root gates, and scoped dev Firebase write/readback passed. Real-vendor F-FN remains unverified until P5 and operator deployment; review and PR publication remain. No rotation or deployment was performed. M5-fn is untouched.
 
@@ -159,7 +167,7 @@ In the same batch walk, for a node with `creator_socials/instagram/api_path === 
 
 ### README (D3)
 
-Add *Legacy function deploy* with the per-function facts read in the first task, the env var names, the per-environment order (functions → Supabase migration → server → client), the `?user_id=` / `?campaign_id=` dry-run scopes, and the rule that `refreshAllCampaignAnalytics` deploys last after a scoped run.
+Maintain `Scheduled legacy social functions` as durable operator guidance: each source folder's registered entry point, work and supported scopes, required env names, explicit per-environment metadata inspection, deployment, verification and rollback. Read runtime/generation/cadence from the current deployment rather than preserving a one-time snapshot as policy. Keep the production-target guards and private-configuration handling. Delivery sequencing and historical observations belong in this plan, not the README.
 
 
 ## Concrete Steps
@@ -208,7 +216,7 @@ PR A and PR B: stage explicit paths, commit per function with `Progress` updated
 
 ## Validation and Acceptance
 
-There is no shared legacy test harness or CI. PR A adds one dependency-free typed Node/VM regression file, `maintenance/creatorOnboardingFunctions.test.ts`, with strict `tsc` and Node commands in the README. Production code gains no mock env hook; vendor and Firebase doubles are injected only in this isolated test. Real-vendor acceptance remains F-FN: `node --check` on every edited file, plus the scoped dry runs above with the written nodes read back, recorded under `Artifacts and Notes` with the run tag, the command, the function's folder digest (`git rev-parse HEAD` + `git status --porcelain -- functions/<name>`), the Node version, and the measured duration. Behaviour a human can verify on dev:
+There is no shared legacy test harness or CI. The maintained dependency-free typed Node/VM suite is `__tests__/legacySocialFunctions.test.ts`, with strict `tsc` and Node commands in the README. Production code gains no mock env hook; vendor and Firebase doubles are injected only in this isolated test. Real-vendor acceptance remains F-FN: `node --check` on every edited file, plus the scoped dry runs above with the written nodes read back, recorded under `Artifacts and Notes` with the run tag, the command, the function's folder digest (`git rev-parse HEAD` + `git status --porcelain -- functions/<name>`), the Node version, and the measured duration. Behaviour a human can verify on dev:
 
 - A creator with a TikTok `access_token` and no `performance` node gets a rate after one scoped call, and the call returns after the write (`processed: 1` in the body; the node read shows `updated` later than the request start).
 - The rotated TikTok `refresh_token` is persisted; a second scoped call succeeds with the new one.
@@ -229,13 +237,11 @@ Every function is a scheduled refresh that overwrites the same fields on each ru
 
 PR A delivery: https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24. Combined technical review GO at `7519ef44d27fc0d735ea2f8a8dd2854405048ccd`; only the production-target guard wording required correction. Post-creation `gh pr view 24 --json url,state,mergedAt,headRefOid,baseRefName,headRefName` returned:
 
-```json
-{"baseRefName":"dev","headRefName":"feature/creator-onboarding-ig-login","headRefOid":"7519ef44d27fc0d735ea2f8a8dd2854405048ccd","mergedAt":null,"state":"OPEN","url":"https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24"}
-```
+    {"baseRefName":"dev","headRefName":"feature/creator-onboarding-ig-login","headRefOid":"7519ef44d27fc0d735ea2f8a8dd2854405048ccd","mergedAt":null,"state":"OPEN","url":"https://github.com/Crafted-Corp/crafted_cloud_functions/pull/24"}
 
 This records the observed PR head before the documentation-only delivery-record commit. No merge or deployment occurred.
 
-2026-10-15 preflight: `gcloud functions list --project=crafted-dev-v1` found all six functions. `gcloud functions describe <deployed-name> --project=crafted-dev-v1 --region=us-central1 --format=json` was parsed privately, emitting name/generation/runtime/entryPoint/source and environment variable names only. All six env-name lists contain only `LOG_EXECUTION_ID`. Exact hosting facts and scheduler cron/time zones are in README `Legacy social-function deployment`. Six social schedulers call functions directly; an unrelated existing traffic-click scheduler calls the production server and was never invoked.
+2026-10-15 preflight: `gcloud functions list --project=crafted-dev-v1` found all six functions. `gcloud functions describe <deployed-name> --project=crafted-dev-v1 --region=us-central1 --format=json` was parsed privately, emitting name/generation/runtime/entryPoint/source and environment variable names only. All six env-name lists contain only `LOG_EXECUTION_ID`. The original hosting/scheduler snapshot was recorded in the then-current README; its git history retains that observation. The active README now requires current per-environment metadata reads instead of treating the snapshot as policy. Six social schedulers call functions directly; an unrelated existing traffic-click scheduler calls the production server and was never invoked.
 
 P9: downloaded the deployed demographics ZIP privately. `instagram.js`, `index.js`, and `firebase_connect.js` are byte-identical; the implementation SHA-256 is `698e2a1e3b744d6dc2d3cbaac973f5633163abde28c2f319d5183a4ddc3d8b02`. The only package.json difference is absence of the local `dev` script in the deployed version. The hardcoded uid gate is absent. No secret values were emitted. The production credential/URL finding is recorded above.
 
@@ -243,11 +249,18 @@ P13: Node read-only key pages of 100 using the server's private `.env.dev`, reje
 
 Verification environment: Node v22.22.0, npm 10.9.4, isolated `npm ci --ignore-scripts --no-audit --no-fund` (665 packages, no lockfile change). Root package-lock SHA-256 `7e7134ecef7c92e17beee979b1a4eebbda6c6b44b3395d09befd2af48c9b7f3e`; installed node_modules/.package-lock SHA-256 `3d0ef0b7eb6de37611b0ab1d92b2ef1be153b35d2b6fe674af6af056f63a3eb0`. Root gates used `NX_DAEMON=false NX_ISOLATE_PLUGINS=false CI=true`; no Firebase/schema/vendor inputs, creator-outreach imports mocked by its own suite. Standalone test injects every external module and uses synthetic env/vendor/Firebase values; schema not applicable.
 
-Measured successful commands from this worktree, exit 0 throughout: `node --check functions/refreshTokens/influencer.js` 32 ms; TikTok rates 23 ms; Instagram rates 25 ms; corresponding copied socialErrors.js 28/18/19 ms. `node_modules/.bin/tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --types node --skipLibCheck maintenance/creatorOnboardingFunctions.test.ts` 792 ms. `node --experimental-strip-types --test maintenance/creatorOnboardingFunctions.test.ts` 300 ms, 5 tests passed / 0 failed. `npm run check:ci` 5315 ms; `npm run typecheck` 3232 ms; `npm run test:ci` 2066 ms, 4 test files / 33 tests passed; `npm run build` 4434 ms. Root commands cover creator-outreach only; standalone checks cover this PR's legacy code. Raw sanitized outputs and command records are local `/tmp/creator-onboarding-functions-check-{0..11}.log` and `/tmp/creator-onboarding-functions-checks.json`. After adding the mixed-batch network-failure assertion and formatting the standalone test, only its strict-tsc and test commands were rerun; their final outputs are `/tmp/creator-onboarding-functions-final-{0..1}.log`. Unchanged production-code syntax and creator-outreach gates are reused at their original measured durations. One initial VM assertion failed because cross-realm objects have different prototypes; structured cloning fixed the test boundary. An initial strict-tsc narrowing error was corrected with a typed object guard before the recorded pass.
+Historical 2026-10-15 evidence at the former test path (retained verbatim; current commands use `__tests__/legacySocialFunctions.test.ts`): measured successful commands from this worktree, exit 0 throughout: `node --check functions/refreshTokens/influencer.js` 32 ms; TikTok rates 23 ms; Instagram rates 25 ms; corresponding copied socialErrors.js 28/18/19 ms. `node_modules/.bin/tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --types node --skipLibCheck maintenance/creatorOnboardingFunctions.test.ts` 792 ms. `node --experimental-strip-types --test maintenance/creatorOnboardingFunctions.test.ts` 300 ms, 5 tests passed / 0 failed. `npm run check:ci` 5315 ms; `npm run typecheck` 3232 ms; `npm run test:ci` 2066 ms, 4 test files / 33 tests passed; `npm run build` 4434 ms. Root commands cover creator-outreach only; standalone checks cover this PR's legacy code. Raw sanitized outputs and command records are local `/tmp/creator-onboarding-functions-check-{0..11}.log` and `/tmp/creator-onboarding-functions-checks.json`. After adding the mixed-batch network-failure assertion and formatting the standalone test, only its strict-tsc and test commands were rerun; their final outputs are `/tmp/creator-onboarding-functions-final-{0..1}.log`. Unchanged production-code syntax and creator-outreach gates are reused at their original measured durations. One initial VM assertion failed because cross-realm objects have different prototypes; structured cloning fixed the test boundary. An initial strict-tsc narrowing error was corrected with a typed object guard before the recorded pass.
 
 Scoped storage evidence: an isolated Node/VM invocation injected the real Firebase Admin app validated as `crafted-dev-v1`, synthetic vendor responses and synthetic tokens. Run tag `agent-creator-onboarding-1792074909103`; all calls carried `query.user_id` equal to the owned tag. Rotation produced the new refresh token and future expiries before response; TikTok zero-history produced `processed: 1`, followerCount 12 and suggestedRate 0 before response; subsequent invalid_grant changed only last_error. Readbacks passed in 2027 ms, then the owned users/{run-tag} node was removed and absence verified. No existing creator was modified. Firebase connection used the dev database URL and private server `.env.dev` credential; no Supabase identity was created. These are real-storage / synthetic-vendor checks, not real TikTok F-FN. Two real-vendor successful rotations and real forced vendor errors remain unverified; P5 credentials/deployment are not present and no secret was rotated.
 
-Applicable code identities at successful verification: token implementation `fb106baf324c6202bce9041f3ff57d96e38f1fad83b29244f0365046661a8f8e`; TikTok rates `ab500138d60ece90372efd29d641fd9e9f60373f44bd75c0305eebd9db2c1b01`; Instagram rates `cf9e821655e3c92e07e45d188221c0d16ce79e4de76e2d8d637d0910b72976d4`; regression test `6e7bce621864a710693bd27b0e058a3110040de2e9098351f4cba230d5d414d4`. Identical copied helper content is versioned alongside them. README/plan-only updates do not invalidate these code-bound checks.
+Historical 2026-10-15 code identities at their then-current paths: token implementation `fb106baf324c6202bce9041f3ff57d96e38f1fad83b29244f0365046661a8f8e`; TikTok rates `ab500138d60ece90372efd29d641fd9e9f60373f44bd75c0305eebd9db2c1b01`; Instagram rates `cf9e821655e3c92e07e45d188221c0d16ce79e4de76e2d8d637d0910b72976d4`; regression test `6e7bce621864a710693bd27b0e058a3110040de2e9098351f4cba230d5d414d4`. Identical copied helper content is versioned alongside them. README/plan-only updates do not invalidate these code-bound checks.
+
+
+2026-10-20 README/test-location correction evidence: the previous test file at `maintenance/creatorOnboardingFunctions.test.ts` was moved byte-identically to `__tests__/legacySocialFunctions.test.ts` (SHA-256 `6e7bce621864a710693bd27b0e058a3110040de2e9098351f4cba230d5d414d4`), preserving all 5 cases. The old path no longer exists. `node_modules/.bin/tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --types node --skipLibCheck __tests__/legacySocialFunctions.test.ts` passed in 2034 ms; `node --experimental-strip-types --test __tests__/legacySocialFunctions.test.ts` passed 5/5, zero failed, in 319 ms. Tests used Node `v22.22.0` / npm `10.9.4`, the unchanged dependency install, and the suite’s existing synthetic VM dependencies; no env/credential/schema or vendor/Firebase inputs are loaded. Exact timestamps, command arrays, source/install/test hashes, results and logs are retained at `/tmp/crafted-readme-correction-20261020-A/report.json` and `check-{0..1}.log`.
+
+Local README verification checked all six source-folder registrations, every req.query scope and required env-name inventory against the documented table/configuration. The new section contains no PR labels/links, rollout-stage story, dated runtime/cadence snapshot or old test command. Its shell examples are parsed with `bash -n`, without executing them; all cloud examples are operator instructions only. Source/dependency digest `a486eee880d1798c58cd6ce753e3976b31b71f700a4729f35a9a06a2cfdb3632` and a zero production/dependency diff establish that this correction changes only README, plan and exact test location. No existing one-off maintenance script was inspected, changed or run. Historical transcripts above retain the former test path as past evidence; active commands use the new path.
+
+The unchanged-input root gates and six production syntax checks are reused from the parent-provided `/tmp/crafted-pr24-audit-8fGW3H` audit evidence rather than rerun. Its root command records report check:ci 47.819 s, typecheck 2.045 s, test:ci 1.019 s and build 2.031 s, all exit 0; the root test output is cached creator-outreach evidence, not new legacy coverage. The newly measured legacy coverage is the five-test command above.
 
 
 ## Interfaces and Dependencies
@@ -298,3 +311,8 @@ Completed M3-fn.2/.3, recorded all preflight findings and measured check identit
 ## Revision note 5 — 2026-10-15, Tech Lead
 
 Combined PR A technical review found no implementation blocker. Corrected stale plan instructions that permitted scoped invocation of a production-backed deployment and implied demographics belonged to PR A deployment. README guards and implementation/check identities are unchanged; real-vendor verification remains pending P5.
+
+
+## Revision note 6 — 2026-10-20, Cloud Engineer
+
+The user corrected the README’s temporary delivery narrative and regression-test placement. Rewrote the legacy-function section as durable operator guidance, moved the suite byte-identically to root __tests__, updated active commands and labeled the former-path check transcript as historical. Source behavior and retained check identities are unchanged; targeted new-path evidence follows.
