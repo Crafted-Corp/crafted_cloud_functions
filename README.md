@@ -351,10 +351,10 @@ above. `maintenance/` holds one-off operator scripts, not maintained regression 
 
 | Source folder | Registered HTTP entry point | Work | Supported query scope |
 | --- | --- | --- | --- |
-| `functions/refreshTokens` | `refreshTiktokAccessTokens` | Refresh TikTok tokens | `user_id` |
+| `functions/refreshTokens` | `refreshTiktokAccessTokens` | Refresh TikTok and Instagram Login tokens | `user_id` |
 | `functions/refreshTikTokRates` | `refreshTiktokRatesForAllAccounts` | Refresh stored TikTok suggested rates | `user_id` |
 | `functions/refreshInstagramRates` | `refreshInstagramRates` | Refresh stored Instagram suggested rates | `user_id` |
-| `functions/updateInstagramDemographics` | `fetchAndUpdateInstagramDemographics` | Refresh Instagram audience demographics | None; scans users |
+| `functions/updateInstagramDemographics` | `fetchAndUpdateInstagramDemographics` | Refresh Instagram audience demographics | `user_id` |
 | `functions/processInstagramComments` | `processInstagramComments` | Collect comments for campaign posts | `campaign_id` |
 | `functions/refreshAllCampaignAnalytics` | `refreshAllCampaignAnalytics` | Refresh campaign performance and link clicks | `campaign_id` |
 
@@ -374,6 +374,10 @@ for existing accounts. Keep their schedules and operational credentials availabl
 when disabling or rolling back the experience. Additive social metadata and
 background refreshes do not expose the new interface. Do not add an experience
 flag to these function deployments or use the browser rollout as a worker switch.
+
+Existing Instagram-path accounts continue to receive token refreshes and
+creator-selected Graph host routing even when the master or Instagram Login flags
+are off. Rolling back the experience preserves those connections and their upkeep.
 
 ### Data targets and configuration
 
@@ -401,6 +405,22 @@ Vendor access/refresh tokens are read from each creator's Firebase social node.
 Keep credentials, private env files and service-account assets out of git and
 shared logs. A runtime module selected by `PRODEV` must resolve inside its uploaded
 standalone source; do not rely on a sibling folder being deployed with it.
+
+Instagram calls select their host from the creator's `api_path`: `"instagram"`
+uses `graph.instagram.com/v24.0`; absent or Facebook paths use
+`graph.facebook.com/v24.0`. Keep the five standalone `graphHost.js` copies
+identical. Account reads use `instagram_user_id` on the Instagram path and
+`instagram_business_account_id` on the Facebook path. Campaign analytics caches
+each creator's Instagram node for one HTTP invocation and rereads it next time.
+
+The `refreshTiktokAccessTokens` entry point refreshes both platforms. Its TikTok
+credential preflight applies even to an Instagram-only scoped run. Instagram
+refresh requires an Instagram-path token and a valid `access_token_expires_at`
+no more than 30 days away; Facebook nodes and missing/invalid expiries are skipped.
+Success atomically writes the new token, expiry and `last_error: null`; Meta 190
+records only `last_error`. Demographics success atomically updates the existing
+demographic fields and clears `last_error`; token/permission errors record only
+`last_error`, while rate limits leave the node alone.
 
 ### Inspect and deploy
 
@@ -485,9 +505,7 @@ install or matching dependency link, without installing through a shared link.
 Live verification writes data and calls vendor APIs. Use only run-tagged dev
 records and an explicitly verified dev data target. For functions supporting
 `user_id`, send a nonempty owned creator ID; for campaign jobs, send a nonempty
-owned `campaign_id`. Omission selects the full collection. Demographics has no
-single-user scope in this source, so do not treat it as a scoped smoke check.
-For a verified creator-scoped local/dev endpoint, for example:
+owned `campaign_id`. Omission selects the full collection. For a verified creator-scoped local/dev endpoint, for example:
 
 ```bash
 curl --fail-with-body --get "${SOCIAL_VERIFIED_DEV_URL:?set a verified dev endpoint}" \
@@ -500,7 +518,9 @@ expiries, and clear `last_error`; two consecutive real-vendor refreshes establis
 that the rotated token remains usable. TikTok rate success includes `updated`,
 `performance.followerCount` and a numeric suggested rate, including zero for no
 history. Instagram rate success includes `suggested_rate`, `updated` and cleared
-`last_error`. Check per-record failures and actual writes as well as the HTTP
+`last_error`. For Instagram token refresh, verify the new token, future expiry
+and cleared `last_error`; for demographics, verify the owned demographic fields.
+Check per-record failures and actual writes as well as the HTTP
 status; a batch can continue past individual failures. For comments and campaign
 analytics, inspect the owned comments/performance nodes and scheduler execution
 logs. Do not paste tokens, credential-bearing URLs or raw vendor errors into

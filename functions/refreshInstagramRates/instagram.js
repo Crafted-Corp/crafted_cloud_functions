@@ -3,6 +3,7 @@ const firebase = require(process.env.PRODEV);
 const cors = require("cors")({ origin: true });
 const moment = require("moment");
 const { metaMessageKey, lastErrorFor } = require("./socialErrors");
+const { graphHostFor } = require("./graphHost");
 
 const BATCH_SIZE_USERS = 100;
 const BATCH_SIZE_MEDIA = 5;
@@ -16,7 +17,7 @@ async function processUserInstagramRate(creator_id, user) {
   const instagramInfo = user?.creator_socials?.instagram;
 
   if (
-    !instagramInfo?.instagram_business_account_id ||
+    !(instagramInfo?.api_path === "instagram" ? instagramInfo?.instagram_user_id : instagramInfo?.instagram_business_account_id) ||
     !instagramInfo?.access_token
   ) {
     console.warn(
@@ -30,7 +31,8 @@ async function processUserInstagramRate(creator_id, user) {
   try {
     suggestedRate = await calculateSuggestedRate(
       instagramInfo.access_token,
-      instagramInfo.instagram_business_account_id,
+      instagramInfo.api_path === "instagram" ? instagramInfo.instagram_user_id : instagramInfo.instagram_business_account_id,
+      instagramInfo,
     );
   } catch (error) {
     const graphError = error.graphError;
@@ -165,8 +167,8 @@ const refreshInstagramRates = async (req, res) => {
   });
 };
 
-async function calculateSuggestedRate(access_token, business_account_id) {
-  const mediaUrl = `https://graph.facebook.com/v24.0/${business_account_id}/media?fields=media_type&access_token=${access_token}&limit=300`;
+async function calculateSuggestedRate(access_token, business_account_id, instagramInfo) {
+  const mediaUrl = `${graphHostFor(instagramInfo)}/${business_account_id}/media?fields=media_type&access_token=${access_token}&limit=300`;
   console.log(
     `[INFO] Fetching media for business_account_id ${business_account_id}`,
   );
@@ -191,7 +193,7 @@ async function calculateSuggestedRate(access_token, business_account_id) {
 
     const playPromises = mediaBatch.map(async (mediaId) => {
       try {
-        const insightsUrl = `https://graph.facebook.com/v24.0/${mediaId}/insights?access_token=${access_token}&metric=views`;
+        const insightsUrl = `${graphHostFor(instagramInfo)}/${mediaId}/insights?access_token=${access_token}&metric=views`;
         const insightsResponse = await fetch(insightsUrl);
         const insightsData = await insightsResponse.json();
 
