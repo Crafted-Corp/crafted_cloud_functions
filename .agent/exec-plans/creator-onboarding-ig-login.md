@@ -54,7 +54,7 @@ The authoritative shared contract is revision 8, `## The cross-repo contract` in
 - [x] (2026-10-22) Recorded the user-authorized environment-wide rollout amendment and branch ownership before implementation.
 - [x] (2026-10-22) M-Rollout functions boundary: documented the server/browser experience flags and unconditional scheduled upkeep; existing handlers need no runtime flag or production changes.
 - [x] (2026-10-22) M-Rollout cloud boundary: static inventory and the cloud-only portion of the single combined tech-lead review closed without blockers; no runtime changes or suite reruns needed.
-- [ ] M-Rollout: root publication and the whole-feature runtime review remain pending; no merge or deployment.
+- [x] (2026-10-22) M-Rollout: published the verified milestone on existing PR #24 and completed the combined technical review. No PR merge or deployment.
 
 
 - [x] (2026-10-20) Replaced the README delivery narrative with durable operating/configuration/deployment/verification/rollback guidance for all six scheduled social functions; relocated the five-test suite byte-identically to `__tests__/legacySocialFunctions.test.ts`. New-path verification and targeted review are recorded below.
@@ -369,4 +369,13 @@ Added revision-8 rollout contract guidance, M-Rollout ownership and legacy compa
 
 ## Revision note 8 — 2026-10-22, Cloud Engineer
 
-Documented the master/subordinate experience flags and unconditional background maintenance in the durable README. Updated this branch’s M-Rollout progress, decision and outcome after a bounded source/registration inventory. No production, configuration or test code changed; no cloud/vendor calls or runtime suites were run. Cloud-only review is now closed without blockers; root publication and the whole-feature runtime verdict remain pending.
+Documented the master/subordinate experience flags and unconditional background maintenance in the durable README. Updated this branch’s M-Rollout progress, decision and outcome after a bounded source/registration inventory. No production, configuration or test code changed; no cloud/vendor calls or runtime suites were run. Cloud-only review is now closed without blockers; root publication and the whole-feature technical review are complete.
+
+
+## Revision note 9 — 2026-10-22, Delivery coordinator
+
+The master-flag milestone was pushed and its existing PR body/head read back at `f5b00a82`. The one combined M-Rollout technical review closed GO across all eight PRs after targeted corrections and integrated evidence inspection. Parent-into-child branch synchronization preserves reviewed code; complete child-tree proofs for the cloud and client stacks are retained in `/tmp/creator-rollout-stack-sync.json`. Publication records are now complete; later metadata-only commits do not invalidate the source/configuration evidence.
+
+This branch changes only durable documentation and its plan for the rollout amendment; scheduled source, tests, configuration and dependencies remain unchanged. Source inventories passed in 0.662 s for the initial maintenance branch and 0.549 s for the Instagram refresh branch. No runtime suite or cloud/vendor call was added.
+
+The default-off environment separation is delivered in code. Operators still own migrations, credentials, backfills, matching client/server activation and hosted checks described in README. No PR merge, deployment, production test or live vendor verification was performed. The server integration result uses targeted checks plus disjoint preserved pre-sync full-suite and upstream CI evidence; no merged-tree whole-suite pass is claimed.
