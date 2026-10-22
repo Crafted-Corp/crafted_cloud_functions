@@ -358,6 +358,27 @@ above. `maintenance/` holds one-off operator scripts, not maintained regression 
 | `functions/processInstagramComments` | `processInstagramComments` | Collect comments for campaign posts | `campaign_id` |
 | `functions/refreshAllCampaignAnalytics` | `refreshAllCampaignAnalytics` | Refresh campaign performance and link clicks | `campaign_id` |
 
+### Experience flags and background maintenance
+
+`ENABLE_CREATOR_ONBOARDING` on the server and
+`REACT_APP_ENABLE_CREATOR_ONBOARDING` in the browser control the new creator
+experience. Both default off; only the exact value `true` enables them. Instagram
+Login additionally requires `ENABLE_INSTAGRAM_LOGIN` on the server and
+`REACT_APP_ENABLE_INSTAGRAM_LOGIN` in the browser, together with the corresponding
+master flag. The server reads its flags per request; browser flags are build-time
+configuration.
+
+Scheduled functions do not read these experience flags. Disabling the experience
+does not stop token rotation, stored-rate refresh, error recording or Graph upkeep
+for existing accounts. Keep their schedules and operational credentials available
+when disabling or rolling back the experience. Additive social metadata and
+background refreshes do not expose the new interface. Do not add an experience
+flag to these function deployments or use the browser rollout as a worker switch.
+
+Existing Instagram-path accounts continue to receive token refreshes and
+creator-selected Graph host routing even when the master or Instagram Login flags
+are off. Rolling back the experience preserves those connections and their upkeep.
+
 ### Data targets and configuration
 
 The hosting project, deployed function name and region do not establish the

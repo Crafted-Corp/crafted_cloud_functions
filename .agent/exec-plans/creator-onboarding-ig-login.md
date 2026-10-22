@@ -41,10 +41,21 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 ## The cross-repo contract
 
+### Rollout contract update — 2026-10-22
+
+The authoritative shared contract is revision 8, `## The cross-repo contract` in `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server/.agent/exec-plans/creator-onboarding-ig-login.md`. Read its environment-wide rollout amendment before M-Rollout. Other server stack plans carry the same amendment. Gustavo's request to feature-flag the entire experience supersedes earlier unflagged scope; earlier enabled behavior remains decided. Master flags are `ENABLE_CREATOR_ONBOARDING` / `REACT_APP_ENABLE_CREATOR_ONBOARDING`, exact `true`, default off; effective Instagram Login requires master AND its existing flag. This is environment-level exposure, not cohorts. Legacy experience, Supabase-first identity persistence, atomic/snapshot/security invariants and background maintenance remain as specified there. No deployment is authorized by this amendment.
+
+
 [Authoritative contract](server/.agent/exec-plans/creator-onboarding-ig-login.md#the-cross-repo-contract) — in the server repository at `server/.agent/exec-plans/creator-onboarding-ig-login.md` (while the branches are unmerged: `/home/gustavo/dev/crafted/.worktrees/feature/creator-onboarding-ig-login-server/.agent/exec-plans/creator-onboarding-ig-login.md`), section `The cross-repo contract`, **revision 3 (2026-10-15)**, subsection *Firebase fields shared with the cloud functions*. This plan relies on: `users/{uid}/creator_socials/instagram/api_path` (`"facebook"` | `"instagram"`, absent = Facebook) selecting `graph.facebook.com/v24.0` vs `graph.instagram.com/v24.0`; `users/{uid}/creator_socials/instagram/{instagram_user_id, access_token_expires_at}` written by the server's Instagram Login path; the `last_error` shape `{ code, subcode?, message_key, at } | null` and its `message_key` catalogue (`ig_190_460`, `ig_190_463`, `ig_190_467`, `ig_190_458`, `ig_190_459`, `ig_190`, `ig_102`, `ig_10`, `ig_200`, `tt_2190002`, `tt_2190003`, `tt_2190008`, `tt_10010`, `tt_invalid_grant`); the rule that every successful connect or refresh writes `last_error: null`; `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` as the function env names; and the deploy order (functions first in each environment, before the server, because an absent `api_path` means the Facebook host). A change there stops M3-fn or M5-fn until these fields are re-checked.
 
 
 ## Progress
+
+- [x] (2026-10-22) Recorded the user-authorized environment-wide rollout amendment and branch ownership before implementation.
+- [x] (2026-10-22) M-Rollout functions boundary: documented the server/browser experience flags and unconditional scheduled upkeep; existing handlers need no runtime flag or production changes.
+- [x] (2026-10-22) M-Rollout cloud boundary: static inventory and the cloud-only portion of the single combined tech-lead review closed without blockers; no runtime changes or suite reruns needed.
+- [ ] M-Rollout: root publication and the whole-feature runtime review remain pending; no merge or deployment.
+
 
 - [x] (2026-10-20) Applied the user-requested durable README correction to the stacked branch, preserving its Instagram routing/refresh details and supported demographics scope; moved the expanded 13-test suite byte-identically to root `__tests__/legacySocialFunctions.test.ts`. New-path checks and targeted review are recorded below.
 
@@ -68,6 +79,13 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 ## Surprises & Discoveries
 
+- Review correction (2026-10-22): the shared rollout matrix had implied blanket legacy-client compatibility with any enabled server. Revision 8 distinguishes soft enforcement from strict activation; the matrix below now preserves that distinction without adding caller headers or weakening enforcement. This is documentation correction only.
+
+- Observation (2026-10-22): bounded source inventory confirms that the six scheduled social services consume no master or Instagram Login experience flag. Their existing registration, credential checks and social-node conditions already keep background upkeep independent of experience rollout. No runtime modification is needed for this branch’s M-Rollout responsibility.
+
+2026-10-22: Source comparison shows this is not navigation-only: Settings, signup/address forms and proposal composers were replaced, while public Amplify briefs, Home and Apply/Manage routes already existed. Restoring supported flag-off behavior requires explicit adapters. Strict proposal schemas are module constants, so flagging only the rule-phase value would leave legacy requests rejected. Identity persistence and social/security maintenance cannot be reverted with presentation.
+
+
 - Observation (2026-10-20): the inherited README repeated delivery labels, prerequisite rollout stages and dated metadata as lasting instructions. This branch also maintained the expanded regression suite under one-off maintenance/. The correction removes delivery narrative while preserving actual Instagram routing/expiry behavior and user-scoped demographics, which differ from the earlier branch.
 
 - Observation (Functions B preflight): `processInstagramComments/instagram.js` already accepts `campaign_id` and returns 404 for a missing campaign on the inherited base. Preserve and regression-check that scope rather than adding a second one. Contract revision 3 changes only staged server email-signup enforcement; the Firebase host/error/expiry contract consumed here is unchanged.
@@ -87,6 +105,11 @@ What goes wrong if someone helpfully does one anyway: a function writing `api_pa
 
 
 ## Decision Log
+
+Decision D-ROLLOUT (2026-10-22, Gustavo authorization; Tech Lead implementation boundary): add environment-level default-off master flags, subordinate Instagram flags, and supported legacy presentation/compatible shared routes. Retain Supabase-first/additive schema, atomic writes/full snapshots/R4, security hardening and unconditional scheduled maintenance. No cohort service. This supersedes earlier assumptions that the entire non-Instagram experience ships enabled; it does not reopen enabled product decisions. Existing worktrees/PRs are reused and common changes are propagated forward through their stacks.
+
+Functions execution of D-ROLLOUT (2026-10-22, Cloud Engineer): preserve all scheduled handlers, registrations, credentials, scopes and tests unchanged. The README identifies the master/subordinate flags as server/browser exposure controls, not worker configuration. Existing social connections and their token/rate/error/Graph upkeep remain active across experience rollback; this adds no cloud flag. Cloud-only review closure preserves the canonical revision-8 activation prerequisite documented in the corrected matrix; server/client runtime verification remains with their owners.
+
 
 - Decision (2026-10-20, Cloud Engineer): adapt the durable operator guidance directly to this stacked branch without merging or rebasing. Retain all 13 regression cases unchanged at root __tests__, update active paths, and retain old measured commands only as clearly historical evidence. Existing one-off maintenance scripts and production handlers remain untouched.
 
@@ -126,6 +149,9 @@ Work starts on the defaults; "all defaults stand" is a complete answer. None blo
 
 ## Outcomes & Retrospective
 
+2026-10-22 functions rollout boundary: README clarification and bounded source verification are complete; no production runtime flag or code change is required. Scheduled upkeep remains unconditional. The cloud-only portion of the single combined tech-lead review is closed without blockers. Root publication and the whole-feature runtime verdict remain pending; server/browser gating is owned by the companion branches, so this outcome does not claim the overall staging/production separation is delivered. Previous check outcomes remain historical evidence for their recorded unchanged sources.
+
+
 2026-10-20 correction: the README now gives enduring instructions for all six scheduled functions, including this branch’s Instagram host selection, token expiry window, cache lifetime and demographics scope. The 13-test suite moved byte-identically to root __tests__. No production source, dependency, API, timeout, query behavior or one-off maintenance script changed; no cloud command ran.
 
 Functions PR A outcome: implements all three M3-fn milestones: atomic rotated TikTok tokens, awaited key-paged TikTok rates, and Instagram reconnect-error persistence with rate-limit suppression. Six syntax checks, strict TypeScript verification of the standalone regression file, five deterministic tests, all four required root gates, and scoped dev Firebase write/readback passed. Real-vendor F-FN remains unverified until P5 and operator deployment. PR #24 is open with combined technical review GO. No rotation or deployment was performed; M5-fn is carried only by B.
@@ -151,6 +177,11 @@ Terms: **`api_path`** — `users/{uid}/creator_socials/instagram/api_path`, `"in
 
 
 ## Plan of Work
+
+### M-Rollout — scheduled maintenance compatibility
+
+Cloud engineer owns only the scheduled-functions README and this plan for the rollout amendment, plus a bounded existing-source inventory. Keep token rotation, rates, error persistence, Graph routing and scoped maintenance behavior unconditional on both branches. A disabled browser experience must not stop maintenance for existing Facebook, TikTok or Instagram Login accounts. No new runtime flag, handler change, dependency or test-suite rewrite is required absent a demonstrated integration defect. Do not inspect or modify one-off maintenance scripts. Document the environment-level experience flags as server/client controls and the worker prerequisites in durable capability terms; retain verified data-target safeguards and the maintained `__tests__/legacySocialFunctions.test.ts` commands. Reuse unchanged-code evidence; do not invoke hosted functions or production Firebase.
+
 
 ### M3-fn.1 — `refreshTokens/influencer.js`
 
@@ -223,6 +254,13 @@ Stage explicit paths and commit each milestone with `Progress` updated. After th
 
 
 ## Validation and Acceptance
+
+### Rollout-flag acceptance matrix
+
+Verify unset, `false`, mixed-case and arbitrary values are off; only `true` is on. Cover master off, master on/Instagram off, both on, and Instagram on/master off. With the server master off, every server branch retains supported legacy requests; disabled new-flow calls perform no feature reads/writes and do not hang. With the server master on, soft enforcement (server A/P) remains compatible with a legacy browser. Strict enforcement (server C/B) requires a matching enabled browser before activation: a legacy-browser/strict-server mismatch rejects missing fields or headers before writes. This activation prerequisite adds no caller-version header and does not weaken strict enforcement. Client-on/server-off new calls must fail closed without unsafe fallback or a loading deadlock. Test old email signup including deferred Auth/profile-write retry, legacy Settings/address and Facebook/TikTok callbacks, both in-app proposals, old public Amplify brief/invite return, Home/Apply lists, and absent feature analytics/network calls when off. Verify enabled feature behavior retains consent, origin/owner checks, status isolation, pricing, social snapshot equality, atomic persistence and Supabase-failure refusal. Include direct route access, not only navigation visibility. Recheck affected real-component layouts for restored and enabled presentation.
+
+Run focused checks during implementation and required integrated gates once per changed runtime branch with source/runtime/dependency identities. Compare actual baseline fixtures when needed; do not treat screenshot similarity as legacy API compatibility. Preserve prior evidence as historical, reuse only unchanged boundaries, and report unverified live Meta/Auth/S3 behavior explicitly. One combined technical review per changed PR with targeted correction closure; no optional product/tester/audit phases or additional reviewers are implied.
+
 
 There is no shared legacy test harness or CI. The maintained dependency-free typed Node/VM suite is `__tests__/legacySocialFunctions.test.ts`, with strict `tsc` and Node commands in the README. Production code gains no mock env hook; vendor and Firebase doubles are injected only in this isolated test. Real-vendor acceptance remains F-FN: `node --check` on every edited file, plus the scoped dry runs above with the written nodes read back, recorded under `Artifacts and Notes` with the run tag, the command, the function's folder digest (`git rev-parse HEAD` + `git status --porcelain -- functions/<name>`), the Node version, and the measured duration. Behaviour a human can verify on dev:
 
@@ -300,6 +338,12 @@ Local README verification checked all six source-folder registrations, every req
 The root project, production handlers, dependencies and runtime have no changes from the recorded combined Functions B verification; those root and twelve syntax results remain applicable. Only the new-path strict TypeScript and 13-case command were rerun. This does not re-run or expand live validation.
 
 
+2026-10-22 M-Rollout functions-only evidence: bounded local inventory of all 41 tracked files in the six scheduled social-service folders found zero occurrences of `ENABLE_CREATOR_ONBOARDING`, `REACT_APP_ENABLE_CREATOR_ONBOARDING`, `ENABLE_INSTAGRAM_LOGIN` or `REACT_APP_ENABLE_INSTAGRAM_LOGIN` in executable/manifests. All six registered entry points still match the README table. Scheduler/deployment/verification instructions from `### Inspect and deploy` onward are byte-identical to HEAD; production source, maintained tests, configuration and dependencies have no delta. Static verification passed in 549 ms; detailed source hashes, paths, timestamped result and registration inventory are in `/tmp/crafted-functions-rollout-docs-B/inventory.json`. No maintenance script, live cloud/vendor call or runtime suite was used. Prior unchanged-source test/build evidence remains applicable and was not rerun. This verifies the functions boundary only; the companion server/browser flag behavior is outside this check.
+
+
+2026-10-22 cloud review closure: the cloud-only portion of the existing single combined tech-lead review found no blocker. Its bounded matrix correction is applied above against canonical server contract revision 8; the frozen reviewed README is unchanged. Existing source-inventory proof remains applicable (549 ms, zero flag references, six registration matches); all recorded source hashes still match. No runtime, test, dependency or configuration input changed, so no suite or cloud/vendor call was rerun. Documentation milestone commits are authorized; root publication and the overall server/browser runtime verdict remain pending.
+
+
 ## Interfaces and Dependencies
 
 Libraries: `@google-cloud/functions-framework`, `firebase-admin`, `axios` / `fetch`, `moment`, `cors` — all already in each folder's `package.json`. No new dependency.
@@ -373,3 +417,13 @@ Recorded Functions B PR #25 publication and observed open state, its parent/base
 ## Revision note 10 — 2026-10-20, Cloud Engineer
 
 Adapted the user's README/test-location correction directly to the stacked branch. Removed temporary rollout narrative and observed-runtime snapshots, preserved this branch's routing/refresh instructions, relocated all 13 test cases unchanged, and labeled former-path check transcripts as historical. New-path evidence follows.
+
+
+## Revision note 11 — 2026-10-22, Tech Lead
+
+Added revision-8 rollout contract guidance, M-Rollout ownership and legacy compatibility boundaries, the flag/misalignment test matrix and current incomplete Progress/Outcomes. User authorization expands scope to environment-wide feature gating; no implementation, configuration, deployment or credential was changed by this plan amendment.
+
+
+## Revision note 12 — 2026-10-22, Cloud Engineer
+
+Documented the master/subordinate experience flags and unconditional background maintenance in the durable README. Updated this branch’s M-Rollout progress, decision and outcome after a bounded source/registration inventory. No production, configuration or test code changed; no cloud/vendor calls or runtime suites were run. Cloud-only review is now closed without blockers; root publication and the whole-feature runtime verdict remain pending.
