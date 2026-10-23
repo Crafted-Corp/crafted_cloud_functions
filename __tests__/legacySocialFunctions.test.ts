@@ -408,10 +408,12 @@ void test("Instagram maps media and insights token errors, leaves rate limits un
     );
     await fx.invoke("refreshInstagramRates", "refreshInstagramRates", "creator");
     assert.equal(fx.writes[0].value.suggested_rate, 5000);
+    assert.equal(fx.writes[0].value.median_plays, 2000);
     assert.equal(fx.writes[0].value.last_error, null);
     fx.fetch = async (): Promise<ResponseValue> => response({ data: [] });
     await fx.invoke("refreshInstagramRates", "refreshInstagramRates", "creator");
     assert.equal(fx.writes[1].value.suggested_rate, 0);
+    assert.equal(fx.writes[1].value.median_plays, 0);
 });
 
 void test("Graph host helpers are identical standalone copies and default to Facebook", (): void => {

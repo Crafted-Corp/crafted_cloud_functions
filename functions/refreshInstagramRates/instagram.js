@@ -28,12 +28,13 @@ async function processUserInstagramRate(creator_id, user) {
 
   console.log(`[INFO] Calculating suggested rate for user ${creator_id}`);
   let suggestedRate;
+  let medianPlays;
   try {
-    suggestedRate = await calculateSuggestedRate(
+    ({ suggestedRate, medianPlays } = await calculateSuggestedRate(
       instagramInfo.access_token,
       instagramInfo.api_path === "instagram" ? instagramInfo.instagram_user_id : instagramInfo.instagram_business_account_id,
       instagramInfo,
-    );
+    ));
   } catch (error) {
     const graphError = error.graphError;
     const messageKey = metaMessageKey(graphError);
@@ -54,6 +55,7 @@ async function processUserInstagramRate(creator_id, user) {
   }
   await firebase.database().ref(`users/${creator_id}/creator_socials/instagram`).update({
     suggested_rate: suggestedRate,
+    median_plays: medianPlays,
     updated: moment().format(),
     last_error: null,
   });
@@ -230,7 +232,7 @@ async function calculateSuggestedRate(access_token, business_account_id, instagr
 
   console.log(`[INFO] Calculated suggested rate: ${suggestedRate}`);
 
-  return suggestedRate;
+  return { suggestedRate, medianPlays };
 }
 
 function median(arr) {
