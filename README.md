@@ -589,9 +589,11 @@ Run once, in this order, before the first deploy of any environment. Already in 
 ```bash
 export GCP_PROJECT="crafted-dev-v1" GCP_REGION="us-central1"
 export INVOKER_SA="rate-refresh-invoker@${GCP_PROJECT}.iam.gserviceaccount.com"
-# The service account behind the GCP_SA_KEY secret (the user-managed account holding
-# roles/run.admin and roles/cloudfunctions.developer in the project). Confirm it before granting.
-export DEPLOY_SA="crafted-deployer@${GCP_PROJECT}.iam.gserviceaccount.com"
+# The service account behind the GCP_SA_KEY secret, read from the key file that secret was created
+# from. The check prints roles/run.admin only for the real deploy account; stop if it prints nothing.
+export DEPLOY_SA="$(jq -r .client_email < gcp-sa-key.json)"
+gcloud projects get-iam-policy "$GCP_PROJECT" --flatten=bindings --format='value(bindings.role)' \
+  --filter="bindings.members:serviceAccount:${DEPLOY_SA} AND bindings.role=roles/run.admin"
 
 # 1) The invoker service account. It gets no project-level roles.
 gcloud iam service-accounts create rate-refresh-invoker --project="$GCP_PROJECT" \
@@ -623,7 +625,7 @@ gh api repos/Crafted-Corp/crafted_cloud_functions/environments/prod \
 Acceptance: `gcloud iam service-accounts describe "$INVOKER_SA" --project="$GCP_PROJECT"` succeeds
 and `gh variable list` shows `RATE_REFRESH_INVOKER_SA`.
 
-## CI/CD flow
+## CI/CD flow (rate functions)
 
 - `.github/workflows/rate-refresh-build.yml`, on a **pull request** (to `dev` or `main`): `quality`
   (root `check:ci`, `typecheck`, `test:ci`), `cold-start-smoke` per function (boots the compiled
@@ -705,9 +707,36 @@ gcloud scheduler jobs list --project="$GCP_PROJECT" --location="$GCP_REGION" \
 **One-time manual prod run** (authorized exception to "never trigger the refresh by hand"; it
 recomputes `suggested_rate` and `median_plays` / `performance` for every non-negotiated creator in
 `crafted-v1` mid-month, so proposals created afterwards carry the new rate while stored proposals
-keep their snapshot). Each call blocks until its run ends (the Instagram run took about ten minutes
-on 2026-10-01). Keep the terminal attached: Cloud Run only allocates CPU while a request is open, so a
-dropped connection can stall the run. Re-running is safe because every run recomputes from scratch.
+keep their snapshot). Fire each `-prod` job: it runs under the invoker account's OIDC identity, exactly
+as the monthly run will, and records `status.code` and `lastAttemptTime` on the job.
+
+```bash
+for FN in refresh-instagram-rates refresh-tiktok-rates; do
+  gcloud scheduler jobs run "${FN}-prod" --project="$GCP_PROJECT" --location="$GCP_REGION"
+done
+```
+
+`jobs run` returns immediately, so completion is read from the function's `finished:` log line (the
+Instagram run took about ten minutes on 2026-10-01). Poll until each function has logged it, then
+check the job outcome:
+
+```bash
+for FN in refresh-instagram-rates refresh-tiktok-rates; do
+  gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${FN}-prod\" AND textPayload:\"finished:\"" \
+    --project="$GCP_PROJECT" --freshness=3h --limit=3 --format='value(timestamp,textPayload)'
+  gcloud scheduler jobs describe "${FN}-prod" --project="$GCP_PROJECT" --location="$GCP_REGION" \
+    --format='value(name.basename(),state,status.code,lastAttemptTime)'
+done
+```
+
+Verify each function before moving on: a `finished:` line with a `failed` count you can explain (a dead
+creator token is `failed` for TikTok and `skipped` for Instagram, with its reason in that creator's
+`last_error`), no `status.code` (or 0) on the job, and one refreshed creator's `updated`. Re-running
+is safe because every run recomputes from scratch.
+
+Alternative, when you want the response body: call the function directly with your own identity token.
+This blocks until the run ends, so keep the terminal attached (Cloud Run only allocates CPU while a
+request is open, so a dropped connection can stall the run); it leaves no attempt on the job.
 
 ```bash
 for FN in refresh-instagram-rates refresh-tiktok-rates; do
@@ -716,20 +745,6 @@ for FN in refresh-instagram-rates refresh-tiktok-rates; do
   echo "== ${FN}-prod"
   curl -sS --max-time 1830 -X POST -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
     -w '\nHTTP %{http_code} in %{time_total}s\n' "$URI"
-done
-```
-
-The equivalent without a hand-minted token is `gcloud scheduler jobs run refresh-instagram-rates-prod
---project="$GCP_PROJECT" --location="$GCP_REGION"` (and the TikTok job): it fires with the invoker
-account's OIDC identity and leaves an attempt on the job. Verify each function before moving on:
-HTTP 200, a `failed` count you can explain (a dead creator token is `failed` for TikTok and `skipped`
-for Instagram, with its reason in that creator's `last_error`), the `finished:` line, and one
-refreshed creator's `updated`:
-
-```bash
-for FN in refresh-instagram-rates refresh-tiktok-rates; do
-  gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${FN}-prod\" AND textPayload:\"finished:\"" \
-    --project="$GCP_PROJECT" --freshness=3h --limit=3 --format='value(timestamp,textPayload)'
 done
 ```
 
