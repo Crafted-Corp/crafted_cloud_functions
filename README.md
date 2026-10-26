@@ -159,7 +159,8 @@ startup. **Only the function hosting project is shared — the Firebase data pro
 
 ## CI/CD flow
 
-Two workflow files drive everything:
+Two workflow files drive `creator-outreach` (the rate functions have their own pair, see
+[Monthly rate refresh](#monthly-rate-refresh)):
 
 - `.github/workflows/creator-outreach-build.yml` — PR quality gate + build preview + the
   `dev`/`staging` deploy jobs.
