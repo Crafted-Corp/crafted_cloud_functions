@@ -5,7 +5,8 @@
   "workspaces": [
     "packages/*",
     "functions/creator-outreach",
-    "functions/refresh-instagram-rates"
+    "functions/refresh-instagram-rates",
+    "functions/refresh-tiktok-rates"
   ],
   "scripts": {
     "prepare": "husky",
