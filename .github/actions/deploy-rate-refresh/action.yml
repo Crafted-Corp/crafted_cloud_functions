@@ -1,0 +1,166 @@
+name: Deploy a rate-refresh function and its Scheduler job
+description: >
+  Deploys one monthly rate-refresh function (private, Scheduler-only invocation) into the shared
+  hosting project and creates or updates its Cloud Scheduler job without changing the job's state.
+  The caller authenticates to Google Cloud and checks out the repository first.
+
+inputs:
+  function:
+    description: refresh-instagram-rates or refresh-tiktok-rates (also the gcloud entry point).
+    required: true
+  environment:
+    description: dev, staging or prod. Selects the deployed name suffix, NODE_ENV and the Firebase key file.
+    required: true
+  project:
+    description: Shared hosting GCP project (repo variable GCP_PROJECT).
+    required: true
+  region:
+    description: Hosting region for the function and the Scheduler job.
+    required: true
+  invoker-sa:
+    description: Service account Cloud Scheduler signs its OIDC token as (repo variable RATE_REFRESH_INVOKER_SA).
+    required: true
+  firebase-sa-key:
+    description: Firebase Admin key JSON for the selected environment's data project (environment secret).
+    required: true
+  sentry-dsn:
+    description: Sentry DSN written into the runtime env file.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve per-function and per-environment settings
+      shell: bash
+      env:
+        FUNCTION: ${{ inputs.function }}
+        ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        case "$FUNCTION" in
+          refresh-instagram-rates) SCHEDULE="0 1 1 * *" ;;
+          refresh-tiktok-rates) SCHEDULE="0 0 1 * *" ;;
+          *) echo "Unknown function: $FUNCTION" >&2; exit 1 ;;
+        esac
+        case "$ENVIRONMENT" in
+          dev) KEY_FILE="devServiceAccountKey.json" ;;
+          staging) KEY_FILE="stagingServiceAccountKey.json" ;;
+          prod) KEY_FILE="serviceAccountKey.json" ;;
+          *) echo "Unknown environment: $ENVIRONMENT" >&2; exit 1 ;;
+        esac
+        {
+          echo "NAME=${FUNCTION}-${ENVIRONMENT}"
+          echo "SCHEDULE=${SCHEDULE}"
+          echo "KEY_FILE=${KEY_FILE}"
+        } >> "$GITHUB_ENV"
+
+    - name: Materialize Firebase Admin key and runtime env file
+      shell: bash
+      env:
+        FUNCTION: ${{ inputs.function }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        FIREBASE_SA_KEY: ${{ inputs.firebase-sa-key }}
+        SENTRY_DSN: ${{ inputs.sentry-dsn }}
+      run: |
+        mkdir -p "functions/${FUNCTION}/config"
+        printf '%s' "$FIREBASE_SA_KEY" > "functions/${FUNCTION}/config/${KEY_FILE}"
+        cat > env.yaml <<EOF
+        NODE_ENV: "${ENVIRONMENT}"
+        SENTRY_DSN: "${SENTRY_DSN}"
+        LOG_EXECUTION_ID: "true"
+        EOF
+
+    - name: Capture current serving revision
+      id: prev
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        REGION: ${{ inputs.region }}
+      run: |
+        PREV=$(gcloud run services describe "$NAME" --region="$REGION" --project="$PROJECT" \
+          --format='value(status.traffic[0].revisionName)' 2>/dev/null || true)
+        echo "revision=$PREV" >> "$GITHUB_OUTPUT"
+
+    - name: Deploy function (private, one instance, one request at a time)
+      id: deploy
+      shell: bash
+      env:
+        FUNCTION: ${{ inputs.function }}
+        PROJECT: ${{ inputs.project }}
+        REGION: ${{ inputs.region }}
+      run: |
+        gcloud functions deploy "$NAME" \
+          --gen2 \
+          --project="$PROJECT" \
+          --region="$REGION" \
+          --runtime=nodejs22 \
+          --trigger-http \
+          --no-allow-unauthenticated \
+          --entry-point="$FUNCTION" \
+          --source="functions/${FUNCTION}" \
+          --env-vars-file=env.yaml \
+          --memory=2Gi --cpu=1 --timeout=1800s --concurrency=1 --max-instances=1
+
+    # A failed rollout never shifts traffic off the last-good revision, so this is
+    # belt-and-suspenders for prod: pin traffic back to the revision that was
+    # serving before the deploy. Nothing to revert on a first-ever deploy.
+    - name: Roll back prod traffic on failed deploy
+      if: failure() && steps.deploy.outcome == 'failure' && inputs.environment == 'prod'
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        REGION: ${{ inputs.region }}
+        PREV_REVISION: ${{ steps.prev.outputs.revision }}
+      run: |
+        if [ -n "$PREV_REVISION" ]; then
+          echo "Deploy failed - reverting $NAME traffic to $PREV_REVISION"
+          gcloud run services update-traffic "$NAME" --region="$REGION" --project="$PROJECT" \
+            --to-revisions="$PREV_REVISION=100"
+        else
+          echo "No previous revision (first deploy?) - nothing to revert."
+        fi
+
+    - name: Let the invoker service account call the function
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        REGION: ${{ inputs.region }}
+        INVOKER_SA: ${{ inputs.invoker-sa }}
+      run: |
+        gcloud functions add-invoker-policy-binding "$NAME" \
+          --project="$PROJECT" --region="$REGION" \
+          --member="serviceAccount:${INVOKER_SA}"
+
+    # `update http` never touches a job's state, so a job an operator paused in the
+    # console stays paused; the guard below only proves that on every deploy.
+    - name: Create or update the Scheduler job
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        REGION: ${{ inputs.region }}
+        INVOKER_SA: ${{ inputs.invoker-sa }}
+      run: |
+        URI=$(gcloud functions describe "$NAME" --gen2 --project="$PROJECT" --region="$REGION" \
+          --format='value(serviceConfig.uri)')
+        ARGS=(--project="$PROJECT" --location="$REGION" --schedule="$SCHEDULE" \
+          --time-zone="America/Cancun" --uri="$URI" --http-method=POST \
+          --oidc-service-account-email="$INVOKER_SA" --oidc-token-audience="$URI" \
+          --attempt-deadline=1800s --max-retry-attempts=0)
+        job_state() {
+          gcloud scheduler jobs describe "$NAME" --project="$PROJECT" --location="$REGION" --format='value(state)'
+        }
+        EXISTING=$(gcloud scheduler jobs list --project="$PROJECT" --location="$REGION" \
+          --filter="name=projects/${PROJECT}/locations/${REGION}/jobs/${NAME}" --format='value(name)')
+        if [ -n "$EXISTING" ]; then
+          BEFORE=$(job_state)
+          gcloud scheduler jobs update http "$NAME" "${ARGS[@]}"
+          if [ "$BEFORE" = "PAUSED" ] && [ "$(job_state)" != "PAUSED" ]; then
+            gcloud scheduler jobs pause "$NAME" --project="$PROJECT" --location="$REGION"
+            echo "::error::Updating $NAME changed its state from PAUSED; it was paused again."
+            exit 1
+          fi
+        else
+          gcloud scheduler jobs create http "$NAME" "${ARGS[@]}"
+        fi
+        echo "Function URI: $URI"
+        gcloud scheduler jobs describe "$NAME" --project="$PROJECT" --location="$REGION" \
+          --format='yaml(name,state,schedule,timeZone,httpTarget.uri,httpTarget.oidcToken.serviceAccountEmail)'

@@ -1,0 +1,53 @@
+# Production promotion for the monthly rate-refresh Cloud Functions.
+# The `prod` GitHub Environment's required-reviewer and deployment-branch rules
+# are configured in repo Settings -> Environments -> prod (they cannot be set
+# from this file); the manual run pauses for approval before any deploy job
+# starts.
+name: rate-refresh Production Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git SHA or tag to promote to production (defaults to the current main)."
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        function: [refresh-instagram-rates, refresh-tiktok-rates]
+    concurrency:
+      group: rate-refresh-deploy-${{ matrix.function }}-prod
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy ${{ matrix.function }}-prod and its Scheduler job
+        uses: ./.github/actions/deploy-rate-refresh
+        with:
+          function: ${{ matrix.function }}
+          environment: prod
+          project: ${{ vars.GCP_PROJECT }}
+          region: ${{ vars.GCP_REGION || 'us-central1' }}
+          invoker-sa: ${{ vars.RATE_REFRESH_INVOKER_SA }}
+          firebase-sa-key: ${{ secrets.FIREBASE_SA_KEY }}
+          sentry-dsn: ${{ secrets.SENTRY_DSN }}
