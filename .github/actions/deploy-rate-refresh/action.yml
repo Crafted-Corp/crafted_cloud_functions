@@ -148,18 +148,20 @@ runs:
         job_state() {
           gcloud scheduler jobs describe "$NAME" --project="$PROJECT" --location="$REGION" --format='value(state)'
         }
-        EXISTING=$(gcloud scheduler jobs list --project="$PROJECT" --location="$REGION" \
-          --filter="name=projects/${PROJECT}/locations/${REGION}/jobs/${NAME}" --format='value(name)')
-        if [ -n "$EXISTING" ]; then
-          BEFORE=$(job_state)
+        ERR=$(mktemp)
+        if BEFORE=$(job_state 2>"$ERR"); then
           gcloud scheduler jobs update http "$NAME" "${ARGS[@]}"
           if [ "$BEFORE" = "PAUSED" ] && [ "$(job_state)" != "PAUSED" ]; then
             gcloud scheduler jobs pause "$NAME" --project="$PROJECT" --location="$REGION"
             echo "::error::Updating $NAME changed its state from PAUSED; it was paused again."
             exit 1
           fi
-        else
+        elif grep -q "NOT_FOUND: Job not found" "$ERR"; then
           gcloud scheduler jobs create http "$NAME" "${ARGS[@]}"
+        else
+          cat "$ERR" >&2
+          echo "::error::Could not read Scheduler job $NAME; not creating or updating it."
+          exit 1
         fi
         echo "Function URI: $URI"
         gcloud scheduler jobs describe "$NAME" --project="$PROJECT" --location="$REGION" \
