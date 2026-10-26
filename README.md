@@ -22,12 +22,12 @@ crafted_cloud_functions/
 │
 ├── functions/
 │   ├── creator-outreach/              ← MODERN reference (TypeScript, CI/CD) — Studio + Amplify outreach
+│   ├── refresh-instagram-rates/       ← MODERN (TypeScript, CI/CD) — monthly Instagram suggested-rate refresh
+│   ├── refresh-tiktok-rates/          ← MODERN (TypeScript, CI/CD) — monthly TikTok suggested-rate refresh
 │   ├── getBalancedUsers/              ← legacy JS
 │   ├── loadUsers/                     ← legacy JS
 │   ├── processInstagramComments/      ← legacy JS
 │   ├── refreshAllCampaignAnalytics/   ← legacy JS
-│   ├── refreshInstagramRates/         ← legacy JS
-│   ├── refreshTikTokRates/            ← legacy JS
 │   ├── refreshTokens/                 ← legacy JS
 │   ├── updateCampaignCreatorSocials/  ← legacy JS
 │   └── updateInstagramDemographics/   ← legacy JS
@@ -57,8 +57,10 @@ Each folder inside `functions/` is a separate Google Cloud Function:
 3. **loadUsers**: Loads and reformats user data.
 4. **processInstagramComments**: Processes comments from Instagram posts.
 5. **refreshAllCampaignAnalytics**: Refreshes analytics data for campaigns (TikTok + Instagram).
-6. **refreshInstagramRates**: Updates Instagram suggested rates for creators.
-7. **refreshTikTokRates**: Updates TikTok suggested rates for creators.
+6. **refresh-instagram-rates**: Monthly refresh of every creator's Instagram suggested rate and
+   median plays. (Modern template — see [Monthly rate refresh](#monthly-rate-refresh).)
+7. **refresh-tiktok-rates**: Monthly refresh of every creator's TikTok suggested rate and
+   performance. (Modern template — see [Monthly rate refresh](#monthly-rate-refresh).)
 8. **refreshTokens**: Refreshes authentication tokens for third-party APIs.
 9. **updateCampaignCreatorSocials**: Updates creator social data inside campaigns.
 10. **updateInstagramDemographics**: Updates demographic information from Instagram data.
@@ -352,8 +354,6 @@ above. `maintenance/` holds one-off operator scripts, not maintained regression 
 | Source folder | Registered HTTP entry point | Work | Supported query scope |
 | --- | --- | --- | --- |
 | `functions/refreshTokens` | `refreshTiktokAccessTokens` | Refresh TikTok and Instagram Login tokens | `user_id` |
-| `functions/refreshTikTokRates` | `refreshTiktokRatesForAllAccounts` | Refresh stored TikTok suggested rates | `user_id` |
-| `functions/refreshInstagramRates` | `refreshInstagramRates` | Refresh stored Instagram suggested rates | `user_id` |
 | `functions/updateInstagramDemographics` | `fetchAndUpdateInstagramDemographics` | Refresh Instagram audience demographics | `user_id` |
 | `functions/processInstagramComments` | `processInstagramComments` | Collect comments for campaign posts | `campaign_id` |
 | `functions/refreshAllCampaignAnalytics` | `refreshAllCampaignAnalytics` | Refresh campaign performance and link clicks | `campaign_id` |
@@ -398,7 +398,7 @@ insufficient.
 The dev Firebase project is `crafted-dev-v1`, with database URL
 `https://crafted-dev-v1-default-rtdb.firebaseio.com`.
 
-All six functions require `PRODEV`. Token refresh additionally requires
+All four functions require `PRODEV`. Token refresh additionally requires
 `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`; missing values return 500 before
 user reads. Campaign analytics uses `BITLY_ACCESS_TOKEN` for short-link clicks.
 Vendor access/refresh tokens are read from each creator's Firebase social node.
@@ -408,7 +408,7 @@ standalone source; do not rely on a sibling folder being deployed with it.
 
 Instagram calls select their host from the creator's `api_path`: `"instagram"`
 uses `graph.instagram.com/v24.0`; absent or Facebook paths use
-`graph.facebook.com/v24.0`. Keep the five standalone `graphHost.js` copies
+`graph.facebook.com/v24.0`. Keep the four standalone `graphHost.js` copies
 identical. Account reads use `instagram_user_id` on the Instagram path and
 `instagram_business_account_id` on the Facebook path. Campaign analytics caches
 each creator's Instagram node for one HTTP invocation and rereads it next time.

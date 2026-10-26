@@ -256,19 +256,19 @@ dev → main
 ```
 functions/
 ├── creator-outreach/              ← Studio + Amplify outreach (scan, email, store results)
+├── refresh-instagram-rates/       ← Monthly Instagram suggested-rate refresh (TypeScript template)
+├── refresh-tiktok-rates/          ← Monthly TikTok suggested-rate refresh (TypeScript template)
 ├── getBalancedUsers/              ← Retrieves users with balances
 ├── loadUsers/                     ← Loads/reformats user data
 ├── processInstagramComments/      ← Processes Instagram post comments
 ├── refreshAllCampaignAnalytics/   ← Refreshes TikTok + Instagram campaign analytics
-├── refreshInstagramRates/         ← Updates Instagram suggested rates for creators
-├── refreshTikTokRates/            ← Updates TikTok suggested rates
 ├── refreshTokens/                 ← Refreshes social API auth tokens
 ├── updateCampaignCreatorSocials/  ← Updates creator social data in campaigns
 ├── updateInstagramDemographics/   ← Updates Instagram demographic data
 maintenance/                       ← One-off utility scripts (not deployed functions)
 ```
 
-Each function folder contains:
+Each **legacy** function folder contains:
 - `index.js` — GCF registration (1-3 lines)
 - `package.json` — function-specific dependencies
 - Supporting `.js` files with implementation

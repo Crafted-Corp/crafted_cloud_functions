@@ -149,7 +149,7 @@ function fixture(users: RecordValue, fetchResponse: (url: string) => Promise<Res
             const file = resolve(
                 "functions",
                 folder,
-                folder === "refreshTokens" || folder === "refreshTikTokRates"
+                folder === "refreshTokens"
                     ? "influencer.js"
                     : folder === "refreshAllCampaignAnalytics"
                       ? "campaign.js"
@@ -269,157 +269,9 @@ void test("rotated tokens and expiries are one awaited update; errors preserve t
     assert.equal((await fx.invoke("refreshTokens", "refreshTiktokAccessTokens", "missing")).status, 404);
 });
 
-void test("newly connected TikTok creator gets zero for no history and original median formula with history", async (): Promise<void> => {
-    const fx = fixture(
-        { creator: socialUser("tiktok", { access_token: "token" }) },
-        async (url): Promise<ResponseValue> =>
-            response(
-                url.includes("user/info")
-                    ? { data: { user: { follower_count: 321 } }, error: { code: "ok" } }
-                    : { data: { videos: [] }, error: { code: "ok" } },
-            ),
-    );
-    assert.deepEqual((await fx.invoke("refreshTikTokRates", "refreshTiktokRatesForAllAccounts", "creator")).body, {
-        processed: 1,
-        skipped: 0,
-        failed: 0,
-    });
-    assert.equal(recordValue(fx.writes[0].value.performance).suggestedRate, 0);
-    assert.equal(recordValue(fx.writes[0].value.performance).followerCount, 321);
-    assert.equal(fx.writes[0].value.last_error, null);
-    assert.equal(typeof fx.writes[0].value.updated, "string");
-    fx.fetch = async (url): Promise<ResponseValue> =>
-        response(
-            url.includes("user/info")
-                ? { data: { user: { follower_count: 321 } } }
-                : {
-                      data: {
-                          videos: [1000, 3000].map(
-                              (view_count): RecordValue => ({
-                                  view_count,
-                                  like_count: 10,
-                                  share_count: 2,
-                                  comment_count: 4,
-                                  share_url: "https://tiktok.com/@creator/video/1",
-                              }),
-                          ),
-                      },
-                  },
-        );
-    await fx.invoke("refreshTikTokRates", "refreshTiktokRatesForAllAccounts", "creator");
-    assert.equal(recordValue(fx.writes[1].value.performance).suggestedRate, 5000);
-    assert.equal(fx.writes[1].value.handle, "creator");
-});
-
-void test("TikTok errors in either response write only last_error and retain counts", async (): Promise<void> => {
-    for (const error of [2190002, 2190003, 2190008, 10010]) {
-        for (const failingEndpoint of ["user/info", "video/list"]) {
-            const fx = fixture(
-                { creator: socialUser("tiktok", { access_token: "token" }) },
-                async (url): Promise<ResponseValue> =>
-                    response(
-                        url.includes(failingEndpoint)
-                            ? { error: { code: error } }
-                            : { data: { user: { follower_count: 10 } } },
-                    ),
-            );
-            assert.equal(
-                (await fx.invoke("refreshTikTokRates", "refreshTiktokRatesForAllAccounts", "creator")).body.failed,
-                1,
-            );
-            assert.deepEqual(Object.keys(fx.writes[0].value), ["last_error"]);
-            assert.equal(recordValue(fx.writes[0].value.last_error).message_key, `tt_${error}`);
-        }
-    }
-});
-
-void test("TikTok pages all users, skips negotiated/disconnected, isolates network failure and limits in-flight calls to five", async (): Promise<void> => {
-    let active = 0;
-    let peak = 0;
-    let failedOnce = false;
-    const users: RecordValue = Object.fromEntries(
-        Array.from({ length: 103 }, (_, n): [string, Json] => [
-            `u${String(n).padStart(3, "0")}`,
-            socialUser("tiktok", { access_token: "token" }),
-        ]),
-    );
-    users.z1 = { negotiated: true, ...socialUser("tiktok", { access_token: "token" }) };
-    users.z2 = socialUser("tiktok", { access_token: "null" });
-    const fx = fixture(users, async (url): Promise<ResponseValue> => {
-        if (!failedOnce) {
-            failedOnce = true;
-            throw new Error("Synthetic per-user network failure");
-        }
-        active++;
-        peak = Math.max(peak, active);
-        await new Promise<void>((done) => setTimeout(done, 1));
-        active--;
-        return response(
-            url.includes("user/info") ? { data: { user: { follower_count: 5 } } } : { data: { videos: [] } },
-        );
-    });
-    const result = await fx.invoke("refreshTikTokRates", "refreshTiktokRatesForAllAccounts");
-    assert.equal(result.body.processed, 102);
-    assert.equal(result.body.skipped, 2);
-    assert.equal(result.body.failed, 1);
-    assert.equal(fx.writes.length, 102);
-    assert.ok(peak <= 5);
-    assert.equal(fx.pages.length, 2);
-    assert.ok(fx.pages.every((size) => size === 100));
-});
-
-void test("Instagram maps media and insights token errors, leaves rate limits untouched, clears errors after success", async (): Promise<void> => {
-    for (const endpoint of ["/media?", "/insights?"]) {
-        for (const code of [190, 102, 10, 200, 4, 17, 32]) {
-            const fx = fixture(
-                {
-                    creator: socialUser("instagram", {
-                        access_token: "token",
-                        instagram_business_account_id: "account",
-                    }),
-                },
-                async (url): Promise<ResponseValue> =>
-                    response(
-                        url.includes(endpoint)
-                            ? { error: { code, error_subcode: 463 } }
-                            : { data: [{ id: "post", media_type: "VIDEO" }] },
-                        !url.includes(endpoint),
-                    ),
-            );
-            await fx.invoke("refreshInstagramRates", "refreshInstagramRates", "creator");
-            if ([4, 17, 32].includes(code)) assert.equal(fx.writes.length, 0);
-            else {
-                assert.deepEqual(Object.keys(fx.writes[0].value), ["last_error"]);
-                assert.equal(
-                    recordValue(fx.writes[0].value.last_error).message_key,
-                    code === 190 ? "ig_190_463" : `ig_${code}`,
-                );
-            }
-        }
-    }
-    const fx = fixture(
-        { creator: socialUser("instagram", { access_token: "token", instagram_business_account_id: "account" }) },
-        async (url): Promise<ResponseValue> =>
-            response(
-                url.includes("/media?")
-                    ? { data: [{ id: "post", media_type: "VIDEO" }] }
-                    : { data: [{ values: [{ value: 2000 }] }] },
-            ),
-    );
-    await fx.invoke("refreshInstagramRates", "refreshInstagramRates", "creator");
-    assert.equal(fx.writes[0].value.suggested_rate, 5000);
-    assert.equal(fx.writes[0].value.median_plays, 2000);
-    assert.equal(fx.writes[0].value.last_error, null);
-    fx.fetch = async (): Promise<ResponseValue> => response({ data: [] });
-    await fx.invoke("refreshInstagramRates", "refreshInstagramRates", "creator");
-    assert.equal(fx.writes[1].value.suggested_rate, 0);
-    assert.equal(fx.writes[1].value.median_plays, 0);
-});
-
 void test("Graph host helpers are identical standalone copies and default to Facebook", (): void => {
     const folders = [
         "refreshTokens",
-        "refreshInstagramRates",
         "updateInstagramDemographics",
         "processInstagramComments",
         "refreshAllCampaignAnalytics",
@@ -444,35 +296,6 @@ void test("Graph host helpers are identical standalone copies and default to Fac
         assert.equal(hostFor(value), "https://graph.facebook.com/v24.0");
     }
     assert.equal(hostFor({ api_path: "instagram" }), "https://graph.instagram.com/v24.0");
-});
-
-void test("Instagram rates route media and insights with each creator's host and account id", async (): Promise<void> => {
-    for (const path of [undefined, "facebook", "instagram"]) {
-        const social: RecordValue = {
-            access_token: "synthetic",
-            instagram_business_account_id: "fb-account",
-            instagram_user_id: "ig-account",
-        };
-        if (path) social.api_path = path;
-        const fx = fixture(
-            { creator: socialUser("instagram", social) },
-            async (url): Promise<ResponseValue> =>
-                response(
-                    url.includes("/media?")
-                        ? { data: [{ id: "post", media_type: "VIDEO" }] }
-                        : { data: [{ values: [{ value: 2000 }] }] },
-                ),
-        );
-        await fx.invoke("refreshInstagramRates", "refreshInstagramRates", "creator");
-        const host = path === "instagram" ? "graph.instagram.com" : "graph.facebook.com";
-        assert.equal(fx.requests.length, 2);
-        assert.ok(fx.requests.every((url) => new URL(url).host === host));
-        assert.equal(
-            new URL(fx.requests[0]).pathname,
-            path === "instagram" ? "/v24.0/ig-account/media" : "/v24.0/fb-account/media",
-        );
-        assert.equal(fx.writes[0].value.suggested_rate, 5000);
-    }
 });
 
 const demographicResponse = (url: string): ResponseValue => {
