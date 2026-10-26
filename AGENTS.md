@@ -279,17 +279,19 @@ The `maintenance/` directory holds data migration and one-off scripts (asset/dra
 
 ## Tooling & Standards (creator-outreach reference)
 
-`functions/creator-outreach/` is the **modernization reference** and is the only function on the
-tooling below. **Every other function in `functions/` remains on the legacy per-directory
-JavaScript pattern** (standalone `package.json`, no shared lint/type/test, no CI) documented in
-the rest of this file. Migrating the rest to this template is future, separately green-lit work.
+`functions/creator-outreach/` is the **modernization reference**; `functions/refresh-instagram-rates/`
+and `functions/refresh-tiktok-rates/` are the other two functions on the tooling below. **Every
+other function in `functions/` remains on the legacy per-directory JavaScript pattern**
+(standalone `package.json`, no shared lint/type/test, no CI) documented in the rest of this file.
+Migrating the rest to this template is future, separately green-lit work.
 Full design context: `.agent/exec-plans/creator-outreach-modernization.md`.
 
 - **npm workspace + Nx.** The repo root is a private npm workspace (`workspaces: ["packages/*",
-  "functions/creator-outreach"]`) orchestrated by Nx. Root scripts fan out per-project via
+  "functions/creator-outreach", "functions/refresh-instagram-rates",
+  "functions/refresh-tiktok-rates"]`) orchestrated by Nx. Root scripts fan out per-project via
   `nx run-many -t <target>`: `npm run check:ci`, `npm run typecheck`, `npm run test:ci`,
-  `npm run build`. Only `creator-outreach` is a member, so these never touch sibling functions.
-- **TypeScript.** `creator-outreach` is strict TypeScript; CI runs an explicit `tsc --noEmit`
+  `npm run build`. Only those three functions are members, so these never touch the legacy functions.
+- **TypeScript.** The three members are strict TypeScript; CI runs an explicit `tsc --noEmit`
   typecheck in addition to the build. Runtime is `nodejs22` throughout (`engines`, `.nvmrc`,
   `tsc` `target: ES2022`, the `google-22` buildpack builder, and every `--runtime=nodejs22`).
 - **Biome** via `@crafted/shared-config` (`packages/shared-config/`, mirror of crafted-src): the
@@ -318,12 +320,20 @@ Full design context: `.agent/exec-plans/creator-outreach-modernization.md`.
   jobs that declare `environment:` (GitHub precedence is environment → repository) — see the
   "Secrets & Variables Matrix" in the ExecPlan.
 
+- **Monthly rate functions (`refresh-instagram-rates`, `refresh-tiktok-rates`).** Same template, one
+  function per directory, but **private** (`--no-allow-unauthenticated`), capped at one instance, and
+  invoked only by a Cloud Scheduler job (OIDC as the invoker service account). The Scheduler job is
+  part of the deploy (`.github/actions/deploy-rate-refresh`, shared by `rate-refresh-build.yml` and
+  `rate-refresh-deploy-prod.yml`): created when absent, updated when present, and a deploy **never
+  resumes a paused job**. Topology, one-time setup and the production cutover: README "Monthly rate refresh".
+
 ### TS build-at-deploy contract (do not break)
 
 GCF Gen2 uploads **TypeScript source** and builds it at deploy: `npm ci` against the standalone
 nested `package-lock.json`, then the `gcp-build` script (`tsc`, copy `templates/*.hbs` into
 `dist/templates/`, and copy any `config/*.json` into `dist/config/`); `package.json`
-`"main": "dist/index.js"`. Therefore:
+`"main": "dist/index.js"`. The two rate functions follow the same contract (no templates, so
+`gcp-build` copies only `config/*.json`). Therefore:
 
 - `tsconfig.json` is **self-contained** — no `extends` of a workspace path.
 - The function manifest **never** lists `@crafted/shared-config` (or any private workspace pkg).
