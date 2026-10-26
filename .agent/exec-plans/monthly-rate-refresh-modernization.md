@@ -31,15 +31,13 @@ Dev and staging data get a monthly rate refresh for the first time; today only p
 - [x] (2026-10-23 20:30Z) Plan authored by tech-lead against PR #25's head; facts verified read-only (`gcloud functions describe`, `gcloud scheduler jobs describe`, Cloud Logging for the 2026-10-01 runs, `gh variable list`). Awaiting user review of the recommendations and Open Questions.
 - [x] (2026-10-26) User answered OQ-1, OQ-3…OQ-7 (see D17–D19 and `Open Questions`); implementation authorized; draft PR #28 open against #25's branch. OQ-2 still open.
 - [ ] M0 — One-time GCP operator steps (invoker service account, deploy-SA role grants, repo variable). Operator-only; owner pending OQ-2 (precedent: the user ran creator-outreach's IAM grants, GitHub Environments and secrets by hand from the README deploy checklist).
-- [ ] M1 — Workspace membership for the two new function directories. (In progress 2026-10-26, cloud-engineer, with M2–M7.)
-- [ ] M2 — `functions/refresh-instagram-rates/` TypeScript port (behaviour-preserving over #25's `instagram.js`).
-- [ ] M3 — `functions/refresh-tiktok-rates/` TypeScript port (behaviour-preserving over #24's `influencer.js`).
-- [ ] M4 — vitest suites per function; migrate the rate-job cases out of `__tests__/legacySocialFunctions.test.ts`.
-- [ ] M5 — Delete `functions/refreshInstagramRates/` and `functions/refreshTikTokRates/`; update the legacy suite's harness and README table.
-- [ ] M6 — Workflows `rate-refresh-build.yml` and `rate-refresh-deploy-prod.yml` (matrix over both functions, Scheduler create/update step, OIDC invoker).
-- [ ] M7 — README + CLAUDE.md: new "Monthly rate refresh" section (topology, Scheduler, cutover, rollback, retirement, scoped manual run), reconciled with #24's "Scheduled legacy social functions" section.
-- [ ] M8 — Required checks, combined tech-lead review, PR (stacked on #25; retarget to `dev` after #24/#25 merge).
-- [ ] M9 — Operator cutover per environment (dev, staging, prod) **before 2026-11-01**: pause the legacy prod jobs, run the one-time manual prod run (D17), pause the dev/staging jobs in the console (D18), retire the legacy jobs and functions after that manual run succeeds.
+- [x] (2026-10-26) M1 + M2 — workspace membership and `functions/refresh-instagram-rates/` port (commit `0cd628e`, cloud-engineer).
+- [x] (2026-10-26) M3 — `functions/refresh-tiktok-rates/` port (`2caca2c`).
+- [x] (2026-10-26) M4 + M5 — per-function vitest suites (IG 71 tests, TikTok 51), legacy folders deleted, legacy suite trimmed to 8 cases, four legacy `graphHost.js` headers edited identically (`5f09fdd`).
+- [x] (2026-10-26) M6 — `rate-refresh-build.yml`, `rate-refresh-deploy-prod.yml` and the composite action `.github/actions/deploy-rate-refresh/action.yml` (`17187d7`).
+- [x] (2026-10-26) M7 — README "Monthly rate refresh" section + CLAUDE.md tooling paragraph (`3c3757a`, `95700e1`).
+- [x] (2026-10-26) M8 — required checks recorded in `Artifacts and Notes` (tree `3c3757a`); combined tech-lead review **GO**; draft PR #28. Review fixes N1–N4 landed in `a1e4da5` (Scheduler `describe` exit-code upsert; fake-gcloud matrix incl. PERMISSION_DENIED → fail, 0 resume calls; shellcheck/actionlint clean) and `4ba8c74` (README: Scheduler run primary, `DEPLOY_SA` derived from the key, heading rename); PR undrafted.
+- [ ] M9 — Operator cutover per environment (dev, staging, prod) **before 2026-11-01**: pause the legacy prod jobs, run the one-time manual prod run (D17), pause the dev/staging jobs in the console (D18), retire the legacy jobs and functions after that manual run succeeds. Blocked on: M0 (OQ-2), the `prod` Environment protection rule (Surprises, 2026-10-26), and #24/#25 merging to `dev`.
 
 
 ## Surprises & Discoveries
@@ -64,6 +62,18 @@ Dev and staging data get a monthly rate refresh for the first time; today only p
 
 - Observation: the worktree at #25's head already contains the `median_plays` fix (`instagram.js` writes `median_plays: medianPlays` in the same `.update()` as `suggested_rate`) and the legacy suite asserts it (`legacySocialFunctions.test.ts:411,416`). The port carries it forward; it does not re-specify it.
   Evidence: `git show HEAD:functions/refreshInstagramRates/instagram.js | grep median_plays`; clean `git status`.
+
+- Observation (2026-10-26, M6): **the `prod`, `staging` and `dev` GitHub Environments have no protection rules and no deployment-branch policy** — `gh api repos/Crafted-Corp/crafted_cloud_functions/environments/<env>` returns empty `protection_rules` for all three, and the repo is PUBLIC. The "required reviewer on `prod`" that the creator-outreach docs describe is therefore not in force: today anyone with write access can run either prod workflow unreviewed. README setup step 6 of the new section tells the operator to check and set the `prod` required reviewer; it is listed as a cutover prerequisite in Outcomes.
+  Evidence: `gh api …/environments/prod --jq '.protection_rules'` → `[]` (2026-10-26).
+
+- Observation (2026-10-26, M5): **retiring the legacy deployments is not reversible from source.** The 2024 bundles `require("./serviceAccountKey.json")` from `firebase_connect.js`, and that key file was never in git; the deployed artifacts are the only copies. Once `gcloud functions delete refreshInstagramRates` / `refreshTikTokRates` runs, a legacy redeploy would need a fresh prod key placed by hand. Consequence: the rollback window in M9 ends at retirement step (5), which is why retirement waits for the verified manual prod run.
+  Evidence: `git show 7c0d1a1:functions/refreshInstagramRates/firebase_connect.js`; `.gitignore` lists `serviceAccountKey.json`.
+
+- Observation (2026-10-26, M6): `creator-outreach-build.yml` sets workflow-level `concurrency: cancel-in-progress: true` for every event, so a second push to `dev` can cancel an in-flight `deploy-dev` of creator-outreach mid-`gcloud functions deploy`. The rate-refresh workflow does not copy that (D11 amendment); the creator-outreach workflow is untouched here. **Recorded as debt** for the creator-outreach pipeline: cancel on `pull_request` only, per-deploy groups with `cancel-in-progress: false`.
+  Evidence: `.github/workflows/creator-outreach-build.yml:26-28`.
+
+- Observation (2026-10-26, M7): `gcloud auth print-identity-token --audiences=<uri>` is rejected for user accounts (it works only for service-account credentials), so the README's `curl` alternative for a scoped run uses a plain `gcloud auth print-identity-token`; Cloud Run accepts a user identity token without an audience claim match when the caller holds `roles/run.invoker`.
+  Evidence: README lines 672–676 (`3c3757a`).
 
 - Observation: the legacy suite is a `node:test` + `node:vm` harness, not vitest, and is not wired into any root gate (README: `node --experimental-strip-types --test __tests__/legacySocialFunctions.test.ts`). Its file-selection branch names `refreshTikTokRates` explicitly (`:152`), and its "Graph host helpers are identical standalone copies" case lists `refreshInstagramRates` among five folders (`:419–431`). Both need editing when the legacy folders go (M5).
 
@@ -114,6 +124,18 @@ Dev and staging data get a monthly rate refresh for the first time; today only p
 - Decision: **D11 — One new workflow pair with a two-function matrix, mirroring creator-outreach's jobs; no reusable-workflow refactor now.** `.github/workflows/rate-refresh-build.yml` (`quality` at the root — already fans out to every workspace member; `cold-start-smoke` and `build-preview` as a `strategy.matrix.function: [refresh-instagram-rates, refresh-tiktok-rates]`; `deploy-dev` / `deploy-staging` matrix jobs with the Scheduler step from D3) and `.github/workflows/rate-refresh-deploy-prod.yml` (`workflow_dispatch`, `environment: prod`, `ref` input, capture-revision + rollback-on-failure, matrix over both functions). Path filters: both function dirs, `packages/shared-config/**`, root `package.json`/`package-lock.json`/`nx.json`, the workflow file. `creator-outreach-build.yml` is untouched.
   Rationale: a `workflow_call` reusable workflow would be a new pattern that creator-outreach would then have to migrate to; with three functions on the template the duplicated YAML is still readable. Recorded as debt: consolidate into a reusable deploy workflow when the next function migrates.
   Date/Author: 2026-10-23, tech-lead.
+  Amendment (2026-10-26, cloud-engineer, accepted in review): the deploy + Scheduler upsert is written **once** in a repo-local composite action, `.github/actions/deploy-rate-refresh/action.yml`, invoked by the `deploy-dev`, `deploy-staging` and `deploy-prod` matrix jobs. It is not a `workflow_call` reusable workflow (no new cross-workflow pattern), and `creator-outreach-build.yml` is untouched. The action's Scheduler step is describe → `update http` / `create http`; it reads the job state before and after an update and, if an update ever flipped PAUSED to ENABLED, pauses it again and fails the step — it never calls `resume` (D18). **Concurrency:** the build workflow cancels in-progress runs only on `pull_request` (`cancel-in-progress: ${{ github.event_name == 'pull_request' }}`), and each deploy job carries its own group `rate-refresh-deploy-<function>-<env>` with `cancel-in-progress: false`, so a push during a deploy queues instead of killing a half-applied `gcloud functions deploy`.
+
+- Decision: **D20 — `?user_id=` must be a single non-empty value; empty or repeated → 400.** Both handlers reject `?user_id=` (empty) and `?user_id=a&user_id=b` with `400 {status:"400", statuscode:"-1", message:"user_id must be a single non-empty value."}` before any Firebase read. The legacy handlers treated an empty `user_id` as absent and ran the **full scan** — a typo in a scoped manual run would have refreshed every creator.
+  Rationale: a scoped run is the only hand-run path operators use against dev; failing closed costs nothing and removes an accidental full-database write.
+  Date/Author: 2026-10-26, cloud-engineer (accepted in the tech-lead review).
+
+- Decision: **D21 — The manual prod run is `gcloud scheduler jobs run <job>` first; an authenticated `curl` is the documented alternative.** README fix N1 reorders the section so the Scheduler-driven run leads (it uses the job's own OIDC identity and leaves an attempt record, per D17) and the `curl -X POST -H "Authorization: Bearer $(gcloud auth print-identity-token)" <uri>` form follows for a scoped `?user_id=` run; the curl uses a plain identity token because `--audiences` fails for user accounts (Surprises).
+  Date/Author: 2026-10-26, tech-lead (review finding N1).
+
+- Decision: **D22 — The header comment in the four remaining legacy `graphHost.js` copies was edited identically** (`refreshTokens`, `updateInstagramDemographics`, `processInstagramComments`, `refreshAllCampaignAnalytics`) to drop `refreshInstagramRates` from the list of standalone copies; the function bodies are byte-identical and unchanged, so the legacy suite's identical-copies case still passes over the four folders.
+  Rationale: a header naming a deleted folder is a stale comment; the Non-Goal "no edit to the other functions' copies" protects their behaviour, not a comment that this PR itself made wrong.
+  Date/Author: 2026-10-26, cloud-engineer (accepted in the tech-lead review).
 
 - Decision: **D12 — Sequencing: this PR stacks on #25 and merges third; it never merges ahead of #24/#25.** The branch is already on #25's head, so the PR targets `feature/creator-onboarding-ig-login-functions-b` and shows only the port; after #24 then #25 land on `dev`, retarget to `dev` (and rebase if either was squash-merged, which otherwise duplicates their commits in this PR — see the stacked-PR trap: deleting a base branch auto-closes the child, so retarget before #25's branch is deleted). If #24/#25 are still unmerged when the user wants this shipped, the only options are (a) wait, or (b) merge #24 and #25 first on their own review — this PR's diff deletes files they modify, so merging it first would both conflict and silently ship their behaviour changes without their contract-coupled server PRs. The plan is written against (a). BD-5.
   Rationale: #24/#25 own the behaviour; this plan owns the packaging. Cutting a fresh branch off `dev` and re-doing the port against pre-#24 code was rejected — it would re-specify their fixes, which the brief forbids.
@@ -164,7 +186,11 @@ Resolved by the user on 2026-10-26 unless marked otherwise; the original default
 
 ## Outcomes & Retrospective
 
-(To be written at the end of M8 and again after M9. Compare against Purpose: typed functions on the root gates, PR gates with no deploy, per-env deploys with pipeline-managed Scheduler jobs, cutover without a double run or missed month, failure visible in Sentry.)
+Entry (2026-10-26, end of M8): **code complete, combined tech-lead review GO.** Against the Purpose: both functions are strict TypeScript workspace members on the root `check:ci` / `typecheck` / `test:ci` / `build` gates; the per-function vitest suites prove `median_plays` is written with `suggested_rate` in one update, both formulas are unchanged, both jobs page 100 keys and isolate per-creator failures, and token errors land in `last_error` as #24 specified (mutation probes in `Artifacts and Notes` confirm each guard bites); PR gates (Biome, typecheck, vitest, cold-start smoke, `pack build`) run with no deploy; per-env deploys and the Scheduler upsert live once in the composite action with OIDC-only invocation; failures reach Sentry and a per-run summary line. Scope held: #24/#25's behaviour was transcribed, not redesigned; the other four legacy functions changed only by a header comment (D22).
+
+Pending before the Purpose's last two bullets (cutover without a double run or missed month; prod live before Nov 1) are true: M0 (OQ-2 — who runs the invoker SA, deploy-SA grants and `RATE_REFRESH_INVOKER_SA`); the `prod` GitHub Environment required-reviewer rule, which does not exist today (Surprises); #24 and #25 merging to `dev` and #28 being retargeted and merged; then the M9 operator cutover before 2026-11-01. Live workflows, `pack build` in CI and every `gcloud` mutation remain unverified until those run (listed as not run in `Artifacts and Notes`).
+
+Lessons: verify the GitHub Environment gate with `gh api` rather than trusting docs that describe it; a scheduled job's only caller being Scheduler makes OIDC-only cheap and should be the default for any further migrated job; and the retirement of hand-deployed 2024 bundles must be treated as one-way because their credentials were never in git.
 
 
 ## Context and Orientation
@@ -312,7 +338,25 @@ Every repo edit is additive except the M5 deletions (recoverable from git). `npm
 
 ## Artifacts and Notes
 
-(Check identities, measured durations, `pack build` log excerpts and the first dev deploy's job listing are recorded here during implementation.)
+Required-check evidence, 2026-10-26, cloud-engineer, measured on tree `3c3757a` (the review fixes N1–N4 touch README/action text only; the code digest for every check below is `3c3757a`). Identity: Node v22.22.0, npm 10.9.4, TypeScript 5.9.3, Nx 22.7.7 with `NX_SKIP_NX_CACHE=true`, Biome 2.3.15, vitest 3.2.7; root install from the committed root lockfile; no `.env` inputs (the suites mock `lib/firebase`); no schema. All exit 0.
+
+    root npm ci                                   4.5 s
+    npm run check:ci                              2.9 s   (3 projects)
+    npm run typecheck                             3.8 s   (3 projects)
+    npm run test:ci                               4.0 s   IG 71 passed, TikTok 51 passed, creator-outreach 33 passed
+    npm run build                                 2.9 s
+    node --experimental-strip-types --test __tests__/legacySocialFunctions.test.ts
+                                                  0.26 s  8/8 passed
+    strict standalone tsc on the legacy suite     0.88 s
+    cold-start smoke (dummy key, build, boot, GET /)   405 from both functions in ~1.0 s each
+    standalone npm ci + gcp-build (scratch copy)  IG 3.6 s + 1.4 s; TikTok similar  (proves the nested lockfiles and tsc-at-deploy)
+    actionlint 1.7.12 / shellcheck 0.11           clean on both workflows and the composite action
+    fake-gcloud upsert harness                    absent → create; present → update; paused stays paused;
+                                                  state flipped by update → re-paused and step fails; 0 `resume` calls
+
+Mutation probes (each run once, each failing the named suite as expected): drop `median_plays` from the IG update → `instagram-rates.test.ts`; change the IG formula constant → IG `rates.test.ts`; change the TikTok formula → TikTok `rates.test.ts`; drop a `performance` key → `tiktok-rates.test.ts`; raise the TikTok in-flight CONCURRENCY above 5 → TikTok `handler.test.ts`; diverge one `social-errors.ts` copy → `helpers-identical.test.ts`.
+
+Not run (and not claimed): `pack build` (runs in CI `build-preview` on the PR), the live workflows, any `gcloud` mutation, any deploy.
 
 Read-only evidence gathered for this plan (2026-10-23): `gcloud functions describe` for both legacy functions and `gcloud scheduler jobs describe` for both jobs (values in Context); `gcloud logging read` on the two Cloud Run services for 2026-10-01T04:00–10:00Z — IG `status=200 latency=580.1s`, TikTok `status=500 latency=70.5s`; `gh variable list` / `gh secret list` / Environments for the repo.
 
@@ -377,3 +421,5 @@ Answered by the user on 2026-10-26 except OQ-2.
 Revision note 1 — 2026-10-23, tech-lead: authored against PR #25's head (`7c0d1a1`) after the baseline moved from `origin/dev`; the port preserves #24/#25's behaviour and cites `.agent/exec-plans/creator-onboarding-ig-login.md` for it. Plan only; no implementation, commit or cloud mutation.
 
 Revision note 2 — 2026-10-26, tech-lead: recorded the user's answers to the Open Questions. D4 superseded by D17 (ship and cut over before 2026-11-01; one authorized manual prod run via `gcloud scheduler jobs run` on cutover day, overriding the "never by hand" rule once; mid-month rate recompute effect stated; legacy retirement authorized after that run). D18 (jobs created enabled in all stages, user pauses dev/staging in the console, deploy never resumes a paused job) amends D2 and replaces BD-2's alternative. D19 confirms BD-1 and BD-8. D12 amended: draft PR #28 exists; #24/#25 must merge before Nov 1 for the deadline, which is the user's call. Sections touched: authorization line, Progress (M0, M1, M9), Decision Log, Blocking decisions (BD-9 added for the still-open OQ-2), Non-Goals, M7, M9, Validation item 7, Open Questions. Implementation of M1–M7 is in progress in this worktree.
+
+Revision note 3 — 2026-10-26, tech-lead: implementation landed (`0cd628e`…`95700e1`) and the combined review returned GO. Progress M1–M8 checked with commits; M9 lists its blockers. Decision Log: D11 amended (composite action `.github/actions/deploy-rate-refresh/action.yml`, PR-only cancel plus per-deploy concurrency groups); D20 (`?user_id` empty/repeated → 400), D21 (`scheduler jobs run` first, curl alternative with a plain identity token), D22 (identical header edit in the four legacy `graphHost.js`). Surprises: no protection rules on any GitHub Environment (repo public), legacy retirement irreversible from source, creator-outreach's workflow-level cancel recorded as debt, `--audiences` unusable for user accounts. Artifacts: check identities, durations, mutation probes and the not-run list. Outcomes written for M8 with the pending items before cutover.
