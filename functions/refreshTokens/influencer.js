@@ -1,7 +1,9 @@
 require("dotenv").config();
 const cors = require("cors")({ origin: true });
 const firebase = require(process.env.PRODEV);
-const { tiktokMessageKey, lastErrorFor } = require("./socialErrors");
+const { tiktokMessageKey, metaMessageKey, lastErrorFor } = require("./socialErrors");
+
+const { graphHostFor } = require("./graphHost");
 
 const refreshUserToken = async (key, user) => {
   const refreshToken = user?.creator_socials?.tiktok?.refresh_token;
@@ -45,6 +47,42 @@ const refreshUserToken = async (key, user) => {
   }
 };
 
+const refreshInstagramToken = async (key, user) => {
+  const instagramInfo = user?.creator_socials?.instagram;
+  if (instagramInfo?.api_path !== "instagram" || typeof instagramInfo.access_token !== "string" ||
+      !instagramInfo.access_token || instagramInfo.access_token === "null" ||
+      typeof instagramInfo.access_token_expires_at !== "string") return;
+  const expiresAt = Date.parse(instagramInfo.access_token_expires_at);
+  if (!Number.isFinite(expiresAt) || expiresAt > Date.now() + 30 * 24 * 60 * 60 * 1000) return;
+  try {
+    const query = new URLSearchParams({ grant_type: "ig_refresh_token", access_token: instagramInfo.access_token });
+    const response = await fetch(`${graphHostFor(instagramInfo)}/refresh_access_token?${query}`);
+    const data = await response.json();
+    const node = firebase.database().ref(`users/${key}/creator_socials/instagram`);
+    if (Number(data.error?.code) === 190) {
+      await node.update({ last_error: lastErrorFor(data.error.code, data.error.error_subcode, metaMessageKey(data.error)) });
+      return;
+    }
+    if (!response.ok || data.error || typeof data.access_token !== "string" || !data.access_token ||
+        !Number.isFinite(data.expires_in) || data.expires_in <= 0) {
+      console.warn(`[WARN] Invalid Instagram refresh response for user ${key}`);
+      return;
+    }
+    await node.update({
+      access_token: data.access_token,
+      access_token_expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+      last_error: null,
+    });
+  } catch {
+    console.error(`[ERROR] Failed refreshing Instagram token for user ${key}`);
+  }
+};
+
+const refreshUserTokens = async (key, user) => {
+  await refreshUserToken(key, user);
+  await refreshInstagramToken(key, user);
+};
+
 const refreshTiktokAccessTokens = async (req, res) => {
   cors(req, res, async () => {
     try {
@@ -57,7 +95,7 @@ const refreshTiktokAccessTokens = async (req, res) => {
       if (userId) {
         const user = (await usersRef.child(userId).once("value")).val();
         if (!user) return res.status(404).json({ status: "404", statuscode: "-1", result: "User not found" });
-        await refreshUserToken(userId, user);
+        await refreshUserTokens(userId, user);
       } else {
         let lastKey = null;
         for (;;) {
@@ -67,7 +105,7 @@ const refreshTiktokAccessTokens = async (req, res) => {
           const keys = users ? Object.keys(users) : [];
           if (keys.length === 0) break;
           for (let i = 0; i < keys.length; i += 5) {
-            await Promise.all(keys.slice(i, i + 5).map((key) => refreshUserToken(key, users[key])));
+            await Promise.all(keys.slice(i, i + 5).map((key) => refreshUserTokens(key, users[key])));
           }
           lastKey = keys[keys.length - 1];
           if (keys.length < 100) break;
