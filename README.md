@@ -341,3 +341,176 @@ feat: add Instagram profile picture caching during token refresh
 fix: handle TikTok refresh_token rotation correctly
 chore: update Firebase SDK
 ```
+
+## Scheduled legacy social functions
+
+These functions are standalone HTTP services under `functions/`. Cloud Scheduler
+invokes their deployed URLs; their source folders are uploaded and deployed
+independently. `creator-outreach` has its own workspace and deployment workflow
+above. `maintenance/` holds one-off operator scripts, not maintained regression tests.
+
+| Source folder | Registered HTTP entry point | Work | Supported query scope |
+| --- | --- | --- | --- |
+| `functions/refreshTokens` | `refreshTiktokAccessTokens` | Refresh TikTok tokens | `user_id` |
+| `functions/refreshTikTokRates` | `refreshTiktokRatesForAllAccounts` | Refresh stored TikTok suggested rates | `user_id` |
+| `functions/refreshInstagramRates` | `refreshInstagramRates` | Refresh stored Instagram suggested rates | `user_id` |
+| `functions/updateInstagramDemographics` | `fetchAndUpdateInstagramDemographics` | Refresh Instagram audience demographics | None; scans users |
+| `functions/processInstagramComments` | `processInstagramComments` | Collect comments for campaign posts | `campaign_id` |
+| `functions/refreshAllCampaignAnalytics` | `refreshAllCampaignAnalytics` | Refresh campaign performance and link clicks | `campaign_id` |
+
+### Experience flags and background maintenance
+
+`ENABLE_CREATOR_ONBOARDING` on the server and
+`REACT_APP_ENABLE_CREATOR_ONBOARDING` in the browser control the new creator
+experience. Both default off; only the exact value `true` enables them. Instagram
+Login additionally requires `ENABLE_INSTAGRAM_LOGIN` on the server and
+`REACT_APP_ENABLE_INSTAGRAM_LOGIN` in the browser, together with the corresponding
+master flag. The server reads its flags per request; browser flags are build-time
+configuration.
+
+Scheduled functions do not read these experience flags. Disabling the experience
+does not stop token rotation, stored-rate refresh, error recording or Graph upkeep
+for existing accounts. Keep their schedules and operational credentials available
+when disabling or rolling back the experience. Additive social metadata and
+background refreshes do not expose the new interface. Do not add an experience
+flag to these function deployments or use the browser rollout as a worker switch.
+
+### Data targets and configuration
+
+The hosting project, deployed function name and region do not establish the
+Firebase data target. Before every execution or deployment, inspect the selected
+`PRODEV` module, its `databaseURL`, and its service-account `project_id` privately.
+Verify the deployed configuration and uploaded assets as well as the local source;
+legacy bundles can load an ignored `.env` and a bundled connection module/key.
+Use explicit hosting project and region flags for each environment.
+
+The dev-hosted `updateInstagramDemographics` and `refreshAllCampaignAnalytics`
+deployments have been found to target production Firebase. Treat them as
+production-backed until a sanctioned dev mapping is verified from the deployed
+configuration, database URL and credential assets. Do not invoke them from an
+agent while their target is production, even with a query scope. Dev validation
+requires a verified dev connection and credential; a dev hostname alone is
+insufficient.
+The dev Firebase project is `crafted-dev-v1`, with database URL
+`https://crafted-dev-v1-default-rtdb.firebaseio.com`.
+
+All six functions require `PRODEV`. Token refresh additionally requires
+`TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`; missing values return 500 before
+user reads. Campaign analytics uses `BITLY_ACCESS_TOKEN` for short-link clicks.
+Vendor access/refresh tokens are read from each creator's Firebase social node.
+Keep credentials, private env files and service-account assets out of git and
+shared logs. A runtime module selected by `PRODEV` must resolve inside its uploaded
+standalone source; do not rely on a sibling folder being deployed with it.
+
+### Inspect and deploy
+
+Read the existing deployment and scheduler job for the selected environment.
+Runtime, generation, deployed name, region and schedule are environment settings;
+read them from the service instead of assuming another environment's values.
+For example, fill in these operator variables before running the read-only commands:
+
+```bash
+SOCIAL_PROJECT="<hosting-project>"
+SOCIAL_REGION="<function-region>"
+SOCIAL_FUNCTION="<existing-deployed-name>"
+SOCIAL_SCHEDULER_LOCATION="<scheduler-location>"
+SOCIAL_JOB="<existing-scheduler-job>"
+
+gcloud functions describe "$SOCIAL_FUNCTION" \
+  --project="$SOCIAL_PROJECT" --region="$SOCIAL_REGION" \
+  --format='yaml(name,environment,buildConfig.runtime,buildConfig.entryPoint,runtime,entryPoint,serviceConfig.timeoutSeconds,serviceConfig.availableMemory,serviceConfig.maxInstanceCount,serviceConfig.maxInstanceRequestConcurrency,serviceConfig.serviceAccountEmail)'
+gcloud scheduler jobs list \
+  --project="$SOCIAL_PROJECT" --location="$SOCIAL_SCHEDULER_LOCATION" \
+  --format='table(name,schedule,timeZone,httpTarget.uri,state)'
+gcloud scheduler jobs describe "$SOCIAL_JOB" \
+  --project="$SOCIAL_PROJECT" --location="$SOCIAL_SCHEDULER_LOCATION" \
+  --format='yaml(name,schedule,timeZone,httpTarget.uri,httpTarget.httpMethod,httpTarget.oidcToken.serviceAccountEmail,httpTarget.oauthToken.serviceAccountEmail,state)'
+```
+
+Confirm the scheduler's target URL, request method, caller identity, cadence and
+time zone against the intended function. Preserve its existing policy and schedule
+unless changing them is part of the requested operation. Record the source revision,
+current deployment configuration and scheduler target before a deploy so rollback
+can restore the same service. Inspect runtime env and IAM settings privately;
+the metadata command above deliberately omits env values.
+
+Deploy only after the operator has verified the data target and prepared the
+standalone source and private runtime env file. Choose `--gen2` or `--no-gen2` and the
+runtime from the existing metadata, with a supported runtime for any approved
+upgrade. The entry point must match the source folder's `index.js` registration.
+For example:
+
+```bash
+SOCIAL_SOURCE="functions/refreshTokens"
+SOCIAL_ENTRY_POINT="refreshTiktokAccessTokens"
+SOCIAL_RUNTIME="<verified-runtime>"
+SOCIAL_GENERATION_FLAG="<verified-generation-flag>"
+
+gcloud functions deploy "$SOCIAL_FUNCTION" \
+  --project="$SOCIAL_PROJECT" --region="$SOCIAL_REGION" \
+  "$SOCIAL_GENERATION_FLAG" --runtime="$SOCIAL_RUNTIME" \
+  --source="$SOCIAL_SOURCE" --entry-point="$SOCIAL_ENTRY_POINT" \
+  --trigger-http --env-vars-file=/private/path/social-runtime-env.yaml
+```
+
+Prepare the complete env file for that function and environment, retaining its
+existing required variables; `--env-vars-file` replaces the runtime env set.
+Preserve resource limits, timeout, service account, trigger and invoker policy.
+Use the corresponding source/entry-point row for another function. Re-read the
+deployment and scheduler target after the change. Changing source does not require
+renaming the deployed function or its scheduler job.
+
+Coordinate TikTok client-secret rotation with configuring and deploying the token
+refresher in the same operator session: a newly issued secret invalidates the old
+one. A code rollback must retain the current valid credentials. Never restore an
+exposed or invalidated secret from git history.
+
+### Verify scheduled work
+
+From the repository root, run the maintained regression suite without loading
+Firebase or contacting vendors:
+
+```bash
+node --experimental-strip-types --test __tests__/legacySocialFunctions.test.ts
+node_modules/.bin/tsc --noEmit --strict --target es2022 --module nodenext \
+  --moduleResolution nodenext --types node --skipLibCheck \
+  __tests__/legacySocialFunctions.test.ts
+```
+
+Run `node --check` on each edited legacy JavaScript file. Root `check:ci`,
+`typecheck`, `test:ci` and `build` scripts cover `creator-outreach`; they do not
+exercise these standalone legacy handlers. Run these checks from an isolated
+install or matching dependency link, without installing through a shared link.
+
+Live verification writes data and calls vendor APIs. Use only run-tagged dev
+records and an explicitly verified dev data target. For functions supporting
+`user_id`, send a nonempty owned creator ID; for campaign jobs, send a nonempty
+owned `campaign_id`. Omission selects the full collection. Demographics has no
+single-user scope in this source, so do not treat it as a scoped smoke check.
+For a verified creator-scoped local/dev endpoint, for example:
+
+```bash
+curl --fail-with-body --get "${SOCIAL_VERIFIED_DEV_URL:?set a verified dev endpoint}" \
+  --data-urlencode "user_id=${SOCIAL_TEST_UID:?set an owned dev creator ID}"
+```
+
+Read back only the owned platform/campaign node after the response. TikTok token
+success must persist both the rotated refresh token and access token, both future
+expiries, and clear `last_error`; two consecutive real-vendor refreshes establish
+that the rotated token remains usable. TikTok rate success includes `updated`,
+`performance.followerCount` and a numeric suggested rate, including zero for no
+history. Instagram rate success includes `suggested_rate`, `updated` and cleared
+`last_error`. Check per-record failures and actual writes as well as the HTTP
+status; a batch can continue past individual failures. For comments and campaign
+analytics, inspect the owned comments/performance nodes and scheduler execution
+logs. Do not paste tokens, credential-bearing URLs or raw vendor errors into
+shared artifacts. Remove only fixtures created for the verification run.
+
+### Rollback
+
+Redeploy the previous reviewed source revision with the same verified environment
+configuration, service account and current valid credentials. Restore a scheduler
+target or policy only if that deployment changed it. Re-read deployment metadata
+and verify the permitted data target before repeating a scoped check. Reverting
+code does not undo Firebase writes; inspect affected records before considering
+any separately authorized data repair.

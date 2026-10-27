@@ -1,14 +1,13 @@
 require("dotenv").config();
-const axios = require("axios");
 const firebase = require(process.env.PRODEV);
 const cors = require("cors")({ origin: true });
 const moment = require("moment");
+const { metaMessageKey, lastErrorFor } = require("./socialErrors");
 
-const BATCH_SIZE_USERS = 100; // Adjust as needed
-const BATCH_SIZE_MEDIA = 5; // Adjust this number based on how many concurrent requests you want for media IDs
+const BATCH_SIZE_USERS = 100;
+const BATCH_SIZE_MEDIA = 5;
 
 async function processUserInstagramRate(creator_id, user) {
-  // Check if negotiated
   if (user && user.negotiated === true) {
     console.log(`[INFO] Skipping user ${creator_id} due to negotiated=true`);
     return { skipped: true, reason: "negotiated" };
@@ -27,24 +26,35 @@ async function processUserInstagramRate(creator_id, user) {
   }
 
   console.log(`[INFO] Calculating suggested rate for user ${creator_id}`);
-  const suggestedRate = await calculateSuggestedRate(
-    instagramInfo.access_token,
-    instagramInfo.instagram_business_account_id,
-  );
-
-  if (!suggestedRate) {
-    throw new Error(
-      `Failed to calculate suggested rate for creator ${creator_id}`,
+  let suggestedRate;
+  try {
+    suggestedRate = await calculateSuggestedRate(
+      instagramInfo.access_token,
+      instagramInfo.instagram_business_account_id,
     );
+  } catch (error) {
+    const graphError = error.graphError;
+    const messageKey = metaMessageKey(graphError);
+    if (messageKey) {
+      await firebase.database().ref(`users/${creator_id}/creator_socials/instagram`).update({
+        last_error: lastErrorFor(graphError.code, graphError.error_subcode, messageKey),
+      });
+      return { skipped: true, reason: "token_error" };
+    }
+    if ([4, 17, 32].includes(Number(graphError?.code))) {
+      console.warn(`[WARN] rate limited for user ${creator_id}`);
+      return { skipped: true, reason: "rate_limited" };
+    }
+    throw error;
   }
-
-  await firebase
-    .database()
-    .ref(`users/${creator_id}/creator_socials/instagram`)
-    .update({
-      suggested_rate: suggestedRate,
-      updated: moment().format(),
-    });
+  if (!Number.isFinite(suggestedRate)) {
+    throw new Error(`Failed to calculate suggested rate for creator ${creator_id}`);
+  }
+  await firebase.database().ref(`users/${creator_id}/creator_socials/instagram`).update({
+    suggested_rate: suggestedRate,
+    updated: moment().format(),
+    last_error: null,
+  });
 
   console.log(`[INFO] Updated suggested rate for user ${creator_id}`);
   return { success: true, suggestedRate };
@@ -163,14 +173,10 @@ async function calculateSuggestedRate(access_token, business_account_id) {
   const mediaResponse = await fetch(mediaUrl);
   const mediaData = await mediaResponse.json();
 
-  if (!mediaResponse.ok) {
-    const message =
-      mediaData?.error?.error_user_msg ||
-      `${mediaResponse.status} ${mediaResponse.statusText}`;
-
-    throw new Error(
-      `[ERROR] Failed to fetch media for business_account_id ${business_account_id}: ${message}`,
-    );
+  if (mediaData.error || !mediaResponse.ok) {
+    const error = new Error(`Failed fetching Instagram media (${mediaResponse.status})`);
+    error.graphError = mediaData.error;
+    throw error;
   }
 
   const reels = mediaData.data
@@ -189,12 +195,10 @@ async function calculateSuggestedRate(access_token, business_account_id) {
         const insightsResponse = await fetch(insightsUrl);
         const insightsData = await insightsResponse.json();
 
-        if (!insightsResponse.ok) {
-          const message =
-            insightsData?.error?.error_user_msg ||
-            `${insightsResponse.status} ${insightsResponse.statusText}`;
-
-          throw new Error(message);
+        if (insightsData.error || !insightsResponse.ok) {
+          const error = new Error(`Failed fetching Instagram insights (${insightsResponse.status})`);
+          error.graphError = insightsData.error;
+          throw error;
         }
 
         if (insightsData.data && insightsData.data.length > 0) {
@@ -203,6 +207,7 @@ async function calculateSuggestedRate(access_token, business_account_id) {
 
         return null;
       } catch (error) {
+        if (metaMessageKey(error.graphError) || [4, 17, 32].includes(Number(error.graphError?.code))) throw error;
         console.error(
           `[ERROR] Failed to fetch insights for mediaId ${mediaId} of business_account_id ${business_account_id}:`,
           error,
