@@ -4,7 +4,9 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "functions/creator-outreach"
+    "functions/creator-outreach",
+    "functions/refresh-instagram-rates",
+    "functions/refresh-tiktok-rates"
   ],
   "scripts": {
     "prepare": "husky",

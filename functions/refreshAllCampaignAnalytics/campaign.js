@@ -9,6 +9,7 @@ const BATCH_SIZE = 10;
 const refreshAllCampaignAnalytics = async (req, res) => {
   cors(req, res, async () => {
     try {
+      const instagramCreators = new Map();
       const campaignsRef = firebase.database().ref("influencer_campaigns");
       let curDate = moment().format();
 
@@ -30,6 +31,7 @@ const refreshAllCampaignAnalytics = async (req, res) => {
             campaign_id: campaignId,
             campaign,
             curDate,
+            instagramCreators,
           });
           console.log(`[SUCCESS] Processed analytics for campaign ${campaignId}`);
           return res.status(200).json({
@@ -88,6 +90,7 @@ const refreshAllCampaignAnalytics = async (req, res) => {
               campaign_id,
               campaign,
               curDate,
+              instagramCreators,
             });
             console.log(
               `[SUCCESS] Processed analytics for campaign ${campaign_id}`,
