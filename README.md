@@ -11,6 +11,9 @@ Two tooling generations live here side by side:
   `creator-outreach-<env>` into one shared GCP project plus a manual production promotion).
   Everything below under
   [creator-outreach infrastructure](#creator-outreach-infrastructure) applies only to it.
+- **`refresh-instagram-rates` and `refresh-tiktok-rates`** are the two monthly rate functions on
+  the same template, with their own workflows and a pipeline-managed Cloud Scheduler job each;
+  see [Monthly rate refresh](#monthly-rate-refresh).
 - **All other functions** remain on the **legacy per-directory pattern** — each is a standalone
   plain-JavaScript folder with its own `package.json` and `node_modules`, no shared tooling, and
   no CI. Migrating them to the `creator-outreach` template is future, separately green-lit work.
@@ -22,12 +25,12 @@ crafted_cloud_functions/
 │
 ├── functions/
 │   ├── creator-outreach/              ← MODERN reference (TypeScript, CI/CD) — Studio + Amplify outreach
+│   ├── refresh-instagram-rates/       ← MODERN (TypeScript, CI/CD) — monthly Instagram suggested-rate refresh
+│   ├── refresh-tiktok-rates/          ← MODERN (TypeScript, CI/CD) — monthly TikTok suggested-rate refresh
 │   ├── getBalancedUsers/              ← legacy JS
 │   ├── loadUsers/                     ← legacy JS
 │   ├── processInstagramComments/      ← legacy JS
 │   ├── refreshAllCampaignAnalytics/   ← legacy JS
-│   ├── refreshInstagramRates/         ← legacy JS
-│   ├── refreshTikTokRates/            ← legacy JS
 │   ├── refreshTokens/                 ← legacy JS
 │   ├── updateCampaignCreatorSocials/  ← legacy JS
 │   └── updateInstagramDemographics/   ← legacy JS
@@ -57,8 +60,10 @@ Each folder inside `functions/` is a separate Google Cloud Function:
 3. **loadUsers**: Loads and reformats user data.
 4. **processInstagramComments**: Processes comments from Instagram posts.
 5. **refreshAllCampaignAnalytics**: Refreshes analytics data for campaigns (TikTok + Instagram).
-6. **refreshInstagramRates**: Updates Instagram suggested rates for creators.
-7. **refreshTikTokRates**: Updates TikTok suggested rates for creators.
+6. **refresh-instagram-rates**: Monthly refresh of every creator's Instagram suggested rate and
+   median plays. (Modern template — see [Monthly rate refresh](#monthly-rate-refresh).)
+7. **refresh-tiktok-rates**: Monthly refresh of every creator's TikTok suggested rate and
+   performance. (Modern template — see [Monthly rate refresh](#monthly-rate-refresh).)
 8. **refreshTokens**: Refreshes authentication tokens for third-party APIs.
 9. **updateCampaignCreatorSocials**: Updates creator social data inside campaigns.
 10. **updateInstagramDemographics**: Updates demographic information from Instagram data.
@@ -125,8 +130,8 @@ manual per-environment deploy and the production promotion.
   (`<PROJECT_NUMBER>-compute@developer.gserviceaccount.com`).
 - **Runtime env vars:** `NODE_ENV` (`dev` | `staging` | `prod`) and `LOG_EXECUTION_ID=true`.
 
-This is the only function on the modern tooling; every other function in `functions/` is still on
-the legacy per-directory JavaScript pattern described above.
+Besides the two rate functions ([Monthly rate refresh](#monthly-rate-refresh)), every other
+function in `functions/` is still on the legacy per-directory JavaScript pattern described above.
 
 ## Multi-env layout (one shared hosting project, env-in-name)
 
@@ -154,7 +159,8 @@ startup. **Only the function hosting project is shared — the Firebase data pro
 
 ## CI/CD flow
 
-Two workflow files drive everything:
+Two workflow files drive `creator-outreach` (the rate functions have their own pair, see
+[Monthly rate refresh](#monthly-rate-refresh)):
 
 - `.github/workflows/creator-outreach-build.yml` — PR quality gate + build preview + the
   `dev`/`staging` deploy jobs.
@@ -254,7 +260,7 @@ This is a coordinated cross-repo change tracked in `server/.agent/exec-plans/cre
 All commands run from the **repo root** (the npm workspace):
 
 ```bash
-npm ci            # install the workspace (root + creator-outreach + shared-config)
+npm ci            # install the workspace (root + the three function members + shared-config)
 npm run check:ci  # Biome lint + format check (fans out via Nx)
 npm run typecheck # tsc --noEmit
 npm run test:ci   # vitest
@@ -347,13 +353,13 @@ chore: update Firebase SDK
 These functions are standalone HTTP services under `functions/`. Cloud Scheduler
 invokes their deployed URLs; their source folders are uploaded and deployed
 independently. `creator-outreach` has its own workspace and deployment workflow
-above. `maintenance/` holds one-off operator scripts, not maintained regression tests.
+above, and the two monthly rate functions have theirs in
+[Monthly rate refresh](#monthly-rate-refresh). `maintenance/` holds one-off operator
+scripts, not maintained regression tests.
 
 | Source folder | Registered HTTP entry point | Work | Supported query scope |
 | --- | --- | --- | --- |
 | `functions/refreshTokens` | `refreshTiktokAccessTokens` | Refresh TikTok and Instagram Login tokens | `user_id` |
-| `functions/refreshTikTokRates` | `refreshTiktokRatesForAllAccounts` | Refresh stored TikTok suggested rates | `user_id` |
-| `functions/refreshInstagramRates` | `refreshInstagramRates` | Refresh stored Instagram suggested rates | `user_id` |
 | `functions/updateInstagramDemographics` | `fetchAndUpdateInstagramDemographics` | Refresh Instagram audience demographics | `user_id` |
 | `functions/processInstagramComments` | `processInstagramComments` | Collect comments for campaign posts | `campaign_id` |
 | `functions/refreshAllCampaignAnalytics` | `refreshAllCampaignAnalytics` | Refresh campaign performance and link clicks | `campaign_id` |
@@ -398,7 +404,7 @@ insufficient.
 The dev Firebase project is `crafted-dev-v1`, with database URL
 `https://crafted-dev-v1-default-rtdb.firebaseio.com`.
 
-All six functions require `PRODEV`. Token refresh additionally requires
+All four functions require `PRODEV`. Token refresh additionally requires
 `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`; missing values return 500 before
 user reads. Campaign analytics uses `BITLY_ACCESS_TOKEN` for short-link clicks.
 Vendor access/refresh tokens are read from each creator's Firebase social node.
@@ -408,8 +414,8 @@ standalone source; do not rely on a sibling folder being deployed with it.
 
 Instagram calls select their host from the creator's `api_path`: `"instagram"`
 uses `graph.instagram.com/v24.0`; absent or Facebook paths use
-`graph.facebook.com/v24.0`. Keep the five standalone `graphHost.js` copies
-identical. Account reads use `instagram_user_id` on the Instagram path and
+`graph.facebook.com/v24.0`. Keep the four standalone `graphHost.js` copies
+identical (`refresh-instagram-rates` has its TypeScript equivalent in `lib/graph-host.ts`). Account reads use `instagram_user_id` on the Instagram path and
 `instagram_business_account_id` on the Facebook path. Campaign analytics caches
 each creator's Instagram node for one HTTP invocation and rereads it next time.
 
@@ -498,8 +504,8 @@ node_modules/.bin/tsc --noEmit --strict --target es2022 --module nodenext \
 ```
 
 Run `node --check` on each edited legacy JavaScript file. Root `check:ci`,
-`typecheck`, `test:ci` and `build` scripts cover `creator-outreach`; they do not
-exercise these standalone legacy handlers. Run these checks from an isolated
+`typecheck`, `test:ci` and `build` scripts cover the three workspace members; they do
+not exercise these standalone legacy handlers. Run these checks from an isolated
 install or matching dependency link, without installing through a shared link.
 
 Live verification writes data and calls vendor APIs. Use only run-tagged dev
@@ -515,11 +521,9 @@ curl --fail-with-body --get "${SOCIAL_VERIFIED_DEV_URL:?set a verified dev endpo
 Read back only the owned platform/campaign node after the response. TikTok token
 success must persist both the rotated refresh token and access token, both future
 expiries, and clear `last_error`; two consecutive real-vendor refreshes establish
-that the rotated token remains usable. TikTok rate success includes `updated`,
-`performance.followerCount` and a numeric suggested rate, including zero for no
-history. Instagram rate success includes `suggested_rate`, `updated` and cleared
-`last_error`. For Instagram token refresh, verify the new token, future expiry
-and cleared `last_error`; for demographics, verify the owned demographic fields.
+that the rotated token remains usable. For Instagram token refresh, verify the
+new token, future expiry and cleared `last_error`; for demographics, verify the
+owned demographic fields.
 Check per-record failures and actual writes as well as the HTTP
 status; a batch can continue past individual failures. For comments and campaign
 analytics, inspect the owned comments/performance nodes and scheduler execution
@@ -534,3 +538,261 @@ target or policy only if that deployment changed it. Re-read deployment metadata
 and verify the permitted data target before repeating a scoped check. Reverting
 code does not undo Firebase writes; inspect affected records before considering
 any separately authorized data repair.
+
+---
+
+# Monthly rate refresh
+
+`refresh-instagram-rates` and `refresh-tiktok-rates` recompute every creator's suggested rate once
+a month. They are workspace members on the same TypeScript template as `creator-outreach`
+(Biome, vitest, build-at-deploy, one shared hosting project with the environment in the deployed
+name) and differ from it in three ways: they are **private** (only Cloud Scheduler can call them,
+with an OIDC token), the deploy **creates or updates their Scheduler job**, and each runs **one
+instance, one request at a time**. They replace the 2024 hand-deployed `refreshInstagramRates` /
+`refreshTikTokRates`.
+
+## Topology
+
+| | `refresh-instagram-rates` | `refresh-tiktok-rates` |
+| --- | --- | --- |
+| In-code target = `--entry-point` | `refresh-instagram-rates` | `refresh-tiktok-rates` |
+| Deployed function = Scheduler job | `refresh-instagram-rates-<env>` | `refresh-tiktok-rates-<env>` |
+| Schedule (`America/Cancun`) | `0 1 1 * *` | `0 0 1 * *` |
+| Node written | `users/<uid>/creator_socials/instagram`: `suggested_rate`, `median_plays`, `updated`, `last_error` | `users/<uid>/creator_socials/tiktok`: `performance` (replaced whole), `updated`, `last_error`, `handle` |
+| Rate formula | `parseInt((median_plays / 1000) * 2500)` | `(median_views / 1000) * 2500` |
+| Response body | `{status, statuscode, message, processed, skipped, failed}` | `{processed, skipped, failed}` |
+
+- **Hosting:** the repo variable `GCP_PROJECT` (`crafted-dev-v1`) for all three environments,
+  `us-central1`, Gen2, `nodejs22`. `NODE_ENV` selects the Firebase **data** project (`dev` →
+  `crafted-dev-v1`, `staging` → `crafted-staging-v1`, `prod` → `crafted-v1`) exactly as in
+  `creator-outreach`; the per-Environment `FIREBASE_SA_KEY` is the only per-env secret.
+- **Resources:** 1 vCPU, 2Gi, concurrency 1, `--max-instances=1`, timeout 1800s. The Scheduler
+  attempt deadline is 1800s (its ceiling for HTTP targets) with `--max-retry-attempts=0`, so a
+  retry or a stray call can never run a second copy against the same database.
+- **Auth:** `--no-allow-unauthenticated`. The invoker service account (repo variable
+  `RATE_REFRESH_INVOKER_SA`) holds `roles/run.invoker` on each function, granted by the deploy;
+  Scheduler signs an OIDC token as it, with the function URI as audience.
+- **Request contract:** POST only (anything else gets 405 before Firebase is touched). No query
+  string refreshes every creator in key-ordered pages of 100. `?user_id=<uid>` refreshes that
+  creator only (404 if the node is absent); an empty or repeated `user_id` is rejected with 400 and
+  never falls through to a full scan. Creators with `negotiated: true` or no token are skipped.
+- **Observability:** each run logs `[INFO] <function> finished: processed=N skipped=N failed=N ms=N`.
+  A handler-level failure is captured in Sentry; a dead creator token is not an incident and
+  lands in that creator's `last_error`.
+
+## One-time setup (operator)
+
+Run once, in this order, before the first deploy of any environment. Already in place from
+`creator-outreach`: the repo variables `GCP_PROJECT` / `GCP_REGION`, the secrets `GCP_SA_KEY` and
+`SENTRY_DSN`, and `FIREBASE_SA_KEY` in each of the `dev` / `staging` / `prod` Environments.
+
+```bash
+export GCP_PROJECT="crafted-dev-v1" GCP_REGION="us-central1"
+export INVOKER_SA="rate-refresh-invoker@${GCP_PROJECT}.iam.gserviceaccount.com"
+# The service account behind the GCP_SA_KEY secret, read from the key file that secret was created
+# from. The check prints roles/run.admin only for the real deploy account; stop if it prints nothing.
+export DEPLOY_SA="$(jq -r .client_email < gcp-sa-key.json)"
+gcloud projects get-iam-policy "$GCP_PROJECT" --flatten=bindings --format='value(bindings.role)' \
+  --filter="bindings.members:serviceAccount:${DEPLOY_SA} AND bindings.role=roles/run.admin"
+
+# 1) The invoker service account. It gets no project-level roles.
+gcloud iam service-accounts create rate-refresh-invoker --project="$GCP_PROJECT" \
+  --display-name="Rate refresh Scheduler invoker"
+
+# 2) The deploy account creates and updates Scheduler jobs.
+gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
+  --member="serviceAccount:${DEPLOY_SA}" --role="roles/cloudscheduler.admin" --condition=None
+
+# 3) The deploy account may attach the invoker account to a job (actAs).
+gcloud iam service-accounts add-iam-policy-binding "$INVOKER_SA" --project="$GCP_PROJECT" \
+  --member="serviceAccount:${DEPLOY_SA}" --role="roles/iam.serviceAccountUser"
+
+# 4) Read-only: the Scheduler service agent can mint the OIDC token (granted when the API was
+#    enabled). Expect serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-cloudscheduler.iam.gserviceaccount.com
+gcloud projects get-iam-policy "$GCP_PROJECT" --flatten=bindings \
+  --filter="bindings.role=roles/cloudscheduler.serviceAgent" --format='value(bindings.members)'
+
+# 5) The repo variable the workflows read.
+gh variable set RATE_REFRESH_INVOKER_SA --repo Crafted-Corp/crafted_cloud_functions --body "$INVOKER_SA"
+
+# 6) Read-only: the prod Environment must carry a required reviewer and a main-only deployment
+#    branch rule (Settings -> Environments -> prod). Both lines must be non-empty before the first
+#    production promotion; without them anyone with write access can dispatch the prod workflow.
+gh api repos/Crafted-Corp/crafted_cloud_functions/environments/prod \
+  --jq '.protection_rules, .deployment_branch_policy'
+```
+
+Acceptance: `gcloud iam service-accounts describe "$INVOKER_SA" --project="$GCP_PROJECT"` succeeds
+and `gh variable list` shows `RATE_REFRESH_INVOKER_SA`.
+
+## CI/CD flow (rate functions)
+
+- `.github/workflows/rate-refresh-build.yml`, on a **pull request** (to `dev` or `main`): `quality`
+  (root `check:ci`, `typecheck`, `test:ci`), `cold-start-smoke` per function (boots the compiled
+  function with a dummy key and expects an HTTP response; a `GET` answers 405) and `build-preview`
+  per function (credential-free `pack build`). Nothing deploys.
+- **Push to `dev`** runs `deploy-dev`; **push or merge to `main`** runs `deploy-staging`. Both
+  deploy the two functions in parallel into the shared hosting project.
+- `.github/workflows/rate-refresh-deploy-prod.yml` is the manual `workflow_dispatch` promotion
+  (`environment: prod`); the workflow file must be on `main` to be dispatchable, so promote
+  `dev` → `main` first. It deploys both functions, each in its own job.
+- Every deploy job calls `.github/actions/deploy-rate-refresh`: write the Firebase key and runtime
+  env file, deploy, (prod only) pin traffic back to the previous revision if the rollout failed, grant
+  the invoker account `roles/run.invoker`, then **create the Scheduler job if it is absent or
+  `update http` it if it exists** (schedule, `America/Cancun`, function URI, OIDC as the invoker
+  account, 1800s deadline, no retries).
+- **A deploy never changes a Scheduler job's state.** A new job is ENABLED; a job someone paused
+  stays paused through every later deploy (the step re-pauses it and fails if that ever stops being
+  true). Nothing in the pipeline resumes a job.
+- Deploy jobs never cancel: each function and environment has its own concurrency group with
+  `cancel-in-progress: false`, and only pull-request runs are superseded.
+
+## Dev and staging
+
+The first deploy of each environment creates its two jobs ENABLED, so they would refresh that
+environment's Firebase on the 1st using whatever creator tokens are stored there. Pause them by
+hand right after the first deploy (console: Cloud Scheduler → select the job → Pause), or:
+
+```bash
+for ENV in dev staging; do
+  for FN in refresh-instagram-rates refresh-tiktok-rates; do
+    gcloud scheduler jobs pause "${FN}-${ENV}" --project="$GCP_PROJECT" --location="$GCP_REGION"
+  done
+done
+gcloud scheduler jobs list --project="$GCP_PROJECT" --location="$GCP_REGION" \
+  --filter='name~[Rr]ates' --format='table(name.basename(),schedule,state)'
+```
+
+Verify a deployed environment with one run-tagged creator (use dev; never prod). The unauthenticated
+call must be refused, and the authenticated scoped call must write only that creator's node:
+
+```bash
+FN=refresh-instagram-rates   # then refresh-tiktok-rates
+URI=$(gcloud functions describe "${FN}-dev" --gen2 --project="$GCP_PROJECT" --region="$GCP_REGION" \
+  --format='value(serviceConfig.uri)')
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST "$URI"            # expect 403
+curl -sS -X POST -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  "${URI}?user_id=${SOCIAL_TEST_UID:?set a run-tagged dev creator ID}"
+```
+
+`gcloud auth print-identity-token --audiences=...` is rejected for user accounts; the plain token is
+accepted for an account holding `roles/run.invoker` (project owners already do). Read the creator's
+node back: Instagram success has `suggested_rate`, `median_plays`, `updated` and `last_error: null`;
+TikTok success has the seven-field `performance`, `updated` and `last_error: null`. Check the
+`finished:` line in the function's log and the actual writes, not only the HTTP status. Keep tokens
+and credential-bearing URLs out of shared artifacts, and remove only the fixtures this run created.
+
+## Production cutover
+
+Do this in one operator session, **before 2026-11-01**, with this PR and its two base PRs merged
+and promoted to `main`, both `-staging` functions deployed and verified, and the `prod` Environment protection
+checked (setup step 6). The new `-prod` jobs are created ENABLED and fire on the 1st, so the legacy
+jobs must be paused in the same session or both generations run. After step 3 the next scheduled
+run is 2026-11-01 on the new functions.
+
+```bash
+# 1) Deploy both -prod functions and create both -prod Scheduler jobs. Approve the run if prompted.
+gh workflow run rate-refresh-deploy-prod.yml --repo Crafted-Corp/crafted_cloud_functions \
+  --ref main -f ref=<sha-validated-on-staging>
+
+# 2) Pause the legacy prod jobs so the legacy 2026-11-01 run does not happen.
+gcloud scheduler jobs pause refreshInstagramRates --project="$GCP_PROJECT" --location="$GCP_REGION"
+gcloud scheduler jobs pause refreshTiktokRatesForAllAccounts --project="$GCP_PROJECT" --location="$GCP_REGION"
+
+# 3) Exactly one ENABLED job per platform: the two -prod jobs. The -dev/-staging jobs are PAUSED.
+gcloud scheduler jobs list --project="$GCP_PROJECT" --location="$GCP_REGION" \
+  --filter='name~[Rr]ates' --format='table(name.basename(),schedule,state)'
+```
+
+**One-time manual prod run** (authorized exception to "never trigger the refresh by hand"; it
+recomputes `suggested_rate` and `median_plays` / `performance` for every non-negotiated creator in
+`crafted-v1` mid-month, so proposals created afterwards carry the new rate while stored proposals
+keep their snapshot). Fire each `-prod` job: it runs under the invoker account's OIDC identity, exactly
+as the monthly run will, and records `status.code` and `lastAttemptTime` on the job.
+
+```bash
+for FN in refresh-instagram-rates refresh-tiktok-rates; do
+  gcloud scheduler jobs run "${FN}-prod" --project="$GCP_PROJECT" --location="$GCP_REGION"
+done
+```
+
+`jobs run` returns immediately, so completion is read from the function's `finished:` log line (the
+Instagram run took about ten minutes on 2026-10-01). Poll until each function has logged it, then
+check the job outcome:
+
+```bash
+for FN in refresh-instagram-rates refresh-tiktok-rates; do
+  gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${FN}-prod\" AND textPayload:\"finished:\"" \
+    --project="$GCP_PROJECT" --freshness=3h --limit=3 --format='value(timestamp,textPayload)'
+  gcloud scheduler jobs describe "${FN}-prod" --project="$GCP_PROJECT" --location="$GCP_REGION" \
+    --format='value(name.basename(),state,status.code,lastAttemptTime)'
+done
+```
+
+Verify each function before moving on: a `finished:` line with a `failed` count you can explain (a dead
+creator token is `failed` for TikTok and `skipped` for Instagram, with its reason in that creator's
+`last_error`), no `status.code` (or 0) on the job, and one refreshed creator's `updated`. Re-running
+is safe because every run recomputes from scratch.
+
+Alternative, when you want the response body: call the function directly with your own identity token.
+This blocks until the run ends, so keep the terminal attached (Cloud Run only allocates CPU while a
+request is open, so a dropped connection can stall the run); it leaves no attempt on the job.
+
+```bash
+for FN in refresh-instagram-rates refresh-tiktok-rates; do
+  URI=$(gcloud functions describe "${FN}-prod" --gen2 --project="$GCP_PROJECT" --region="$GCP_REGION" \
+    --format='value(serviceConfig.uri)')
+  echo "== ${FN}-prod"
+  curl -sS --max-time 1830 -X POST -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+    -w '\nHTTP %{http_code} in %{time_total}s\n' "$URI"
+done
+```
+
+## Rollback and retirement
+
+- **Before retirement:** pause the two `-prod` jobs and resume the two legacy jobs. No redeploy is
+  needed; the legacy functions stay deployed until they are retired (below).
+  ```bash
+  for JOB in refresh-instagram-rates-prod refresh-tiktok-rates-prod; do
+    gcloud scheduler jobs pause "$JOB" --project="$GCP_PROJECT" --location="$GCP_REGION"
+  done
+  for JOB in refreshInstagramRates refreshTiktokRatesForAllAccounts; do
+    gcloud scheduler jobs resume "$JOB" --project="$GCP_PROJECT" --location="$GCP_REGION"
+  done
+  ```
+- **A failed prod deploy** keeps the last-good revision serving; the action also pins traffic back
+  to the revision that was serving before the deploy.
+- **Retirement** (authorized once the manual prod run above succeeded): delete the legacy jobs, then
+  the legacy functions. **This is not reversible from git**: the 2024 bundles carry their own
+  `serviceAccountKey.json`, which is gitignored, so a deleted legacy function cannot be rebuilt from
+  the repository.
+  ```bash
+  gcloud scheduler jobs delete refreshInstagramRates --project="$GCP_PROJECT" --location="$GCP_REGION"
+  gcloud scheduler jobs delete refreshTiktokRatesForAllAccounts --project="$GCP_PROJECT" --location="$GCP_REGION"
+  gcloud functions delete refreshInstagramRates --gen2 --project="$GCP_PROJECT" --region="$GCP_REGION"
+  gcloud functions delete refreshTikTokRates --gen2 --project="$GCP_PROJECT" --region="$GCP_REGION"
+  ```
+
+## Operator checks
+
+After the first of each month, read each job's outcome. A healthy run has no `status.code` (or 0)
+and a `lastAttemptTime` on the 1st; the legacy jobs, once retired, no longer appear:
+
+```bash
+for FN in refresh-instagram-rates refresh-tiktok-rates; do
+  gcloud scheduler jobs describe "${FN}-prod" --project="$GCP_PROJECT" --location="$GCP_REGION" \
+    --format='value(name.basename(),state,status.code,lastAttemptTime)'
+done
+```
+
+The Scheduler status code is the only signal for a run that never reached the function (a refused
+OIDC token, a timeout); a run that failed inside the handler also appears in Sentry.
+
+## Local development (rate functions)
+
+From the repo root, the same gate as `creator-outreach`: `npm ci`, `npm run check:ci`,
+`npm run typecheck`, `npm run test:ci`, `npm run build -w refresh-instagram-rates` (or
+`refresh-tiktok-rates`). To run one against **dev only**, place a dev Firebase key at
+`functions/<name>/config/devServiceAccountKey.json`, then `cd functions/<name> && NODE_ENV=dev npm run dev`
+and `POST` to `localhost:8080` with `?user_id=<run-tagged dev creator>`. A local run with the prod key
+writes production data.

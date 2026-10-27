@@ -1,0 +1,222 @@
+name: rate-refresh Build
+
+on:
+  push:
+    paths:
+      - "functions/refresh-instagram-rates/**"
+      - "functions/refresh-tiktok-rates/**"
+      - "packages/shared-config/**"
+      - "package.json"
+      - "package-lock.json"
+      - "nx.json"
+      - "commitlint.config.js"
+      - ".github/workflows/rate-refresh-build.yml"
+      - ".github/actions/deploy-rate-refresh/**"
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - "functions/refresh-instagram-rates/**"
+      - "functions/refresh-tiktok-rates/**"
+      - "packages/shared-config/**"
+      - "package.json"
+      - "package-lock.json"
+      - "nx.json"
+      - "commitlint.config.js"
+      - ".github/workflows/rate-refresh-build.yml"
+      - ".github/actions/deploy-rate-refresh/**"
+  workflow_dispatch:
+
+# Only pull-request runs are superseded; a push run can hold a deploy job.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit
+
+      - name: Biome lint + format check
+        run: npm run check:ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:ci
+
+  cold-start-smoke:
+    needs: quality
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        function: [refresh-instagram-rates, refresh-tiktok-rates]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit
+
+      # A structurally-valid dummy key so lib/firebase.ts's import-time key load
+      # resolves. It must exist BEFORE the build so gcp-build copies it into
+      # dist/config/ (config/ is gitignored - this key is never committed).
+      - name: Generate dummy Firebase service-account key
+        env:
+          FUNCTION: ${{ matrix.function }}
+        run: |
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/fk.pem
+          mkdir -p "functions/${FUNCTION}/config"
+          python3 -c "import json,os;k=open('/tmp/fk.pem').read();json.dump({'type':'service_account','project_id':'crafted-dev-v1','private_key_id':'ci','private_key':k,'client_email':'ci@crafted-dev-v1.iam.gserviceaccount.com','client_id':'0','token_uri':'https://oauth2.googleapis.com/token'},open('functions/%s/config/devServiceAccountKey.json' % os.environ['FUNCTION'],'w'))"
+
+      - name: Build (tsc + copy config into dist)
+        env:
+          FUNCTION: ${{ matrix.function }}
+        run: npm run build -w "$FUNCTION"
+
+      # Boot the COMPILED function and prove it listens. A GET gets 405 before any
+      # Firebase read, so the dummy credential is never used; the job fails only
+      # if curl cannot connect after the retries, i.e. the module threw at import.
+      - name: Boot compiled function and probe :8080
+        working-directory: functions/${{ matrix.function }}
+        env:
+          FUNCTION: ${{ matrix.function }}
+        run: |
+          NODE_ENV=dev npx functions-framework --target="$FUNCTION" --port=8080 &
+          FF_PID=$!
+          set +e
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+            --retry-connrefused --retry 20 --retry-delay 1 \
+            -X GET localhost:8080)
+          CURL_EXIT=$?
+          set -e
+          echo "HTTP status: ${STATUS} (curl exit ${CURL_EXIT})"
+          kill "$FF_PID" 2>/dev/null || true
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "Function never listened on :8080 - module threw at cold start."
+            exit 1
+          fi
+          echo "Function booted and served an HTTP response - cold start healthy."
+
+  build-preview:
+    needs: quality
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        function: [refresh-instagram-rates, refresh-tiktok-rates]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pack CLI
+        env:
+          PACK_VERSION: 0.40.8
+        run: |
+          curl -sSL "https://github.com/buildpacks/pack/releases/download/v${PACK_VERSION}/pack-v${PACK_VERSION}-linux.tgz" \
+            | sudo tar -C /usr/local/bin --no-same-owner -xzv pack
+          pack version
+
+      - name: Buildpack dry-run (build only, no publish, no cloud credentials)
+        env:
+          FUNCTION: ${{ matrix.function }}
+        run: |
+          pack build "${FUNCTION}-dryrun" \
+            --path "functions/${FUNCTION}" \
+            --builder gcr.io/buildpacks/builder:google-22 \
+            --env GOOGLE_FUNCTION_TARGET="$FUNCTION" \
+            --env GOOGLE_RUNTIME=nodejs22 \
+            --env GOOGLE_NODEJS_VERSION=22
+
+  deploy-dev:
+    if: github.ref_name == 'dev'
+    needs: [quality, cold-start-smoke, build-preview]
+    runs-on: ubuntu-latest
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        function: [refresh-instagram-rates, refresh-tiktok-rates]
+    concurrency:
+      group: rate-refresh-deploy-${{ matrix.function }}-dev
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy ${{ matrix.function }}-dev and its Scheduler job
+        uses: ./.github/actions/deploy-rate-refresh
+        with:
+          function: ${{ matrix.function }}
+          environment: dev
+          project: ${{ vars.GCP_PROJECT }}
+          region: ${{ vars.GCP_REGION || 'us-central1' }}
+          invoker-sa: ${{ vars.RATE_REFRESH_INVOKER_SA }}
+          firebase-sa-key: ${{ secrets.FIREBASE_SA_KEY }}
+          sentry-dsn: ${{ secrets.SENTRY_DSN }}
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main'
+    needs: [quality, cold-start-smoke, build-preview]
+    runs-on: ubuntu-latest
+    environment: staging
+    strategy:
+      fail-fast: false
+      matrix:
+        function: [refresh-instagram-rates, refresh-tiktok-rates]
+    concurrency:
+      group: rate-refresh-deploy-${{ matrix.function }}-staging
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy ${{ matrix.function }}-staging and its Scheduler job
+        uses: ./.github/actions/deploy-rate-refresh
+        with:
+          function: ${{ matrix.function }}
+          environment: staging
+          project: ${{ vars.GCP_PROJECT }}
+          region: ${{ vars.GCP_REGION || 'us-central1' }}
+          invoker-sa: ${{ vars.RATE_REFRESH_INVOKER_SA }}
+          firebase-sa-key: ${{ secrets.FIREBASE_SA_KEY }}
+          sentry-dsn: ${{ secrets.SENTRY_DSN }}
