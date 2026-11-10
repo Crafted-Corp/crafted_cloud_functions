@@ -29,6 +29,12 @@ const fakeFirebase = () =>
 
 beforeEach(() => {
     vi.clearAllMocks();
+    // Vitest runs with NODE_ENV=test, which the outreach emails reject as an unknown environment.
+    vi.stubEnv("NODE_ENV", "dev");
+});
+
+afterEach(() => {
+    vi.unstubAllEnvs();
 });
 
 describe("extractResults", () => {

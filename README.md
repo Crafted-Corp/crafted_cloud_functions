@@ -157,6 +157,13 @@ data projects `crafted-dev-v1` / `crafted-staging-v1` / `crafted-v1`); it also s
 `environment` tag in `lib/sentry.ts`. An unknown `NODE_ENV`, or a missing key file, throws at
 startup. **Only the function hosting project is shared — the Firebase data projects stay per-env.**
 
+`NODE_ENV` also picks the frontend origin behind the "Apply for Briefs" button in both outreach
+emails (`lib/environment.ts`): `dev` → `https://crafted-web-dev-client.herokuapp.com`, `staging` →
+`https://crafted-web-staging-client-4fdf273c9eea.herokuapp.com`, `prod` →
+`https://www.app.cookwithcrafted.com`, each followed by `/creator/dashboard/tasks`. Update that map
+if a frontend moves. Emails already sent keep the link they were rendered with, so a fix to it only
+reaches blasts sent after the function is rebuilt and redeployed.
+
 ## CI/CD flow
 
 Two workflow files drive `creator-outreach` (the rate functions have their own pair, see

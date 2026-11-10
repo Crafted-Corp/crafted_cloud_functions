@@ -1,12 +1,13 @@
 import path from "node:path";
 import * as admin from "firebase-admin";
+import { type Environment, resolveEnvironment } from "./environment";
 
 interface EnvConfig {
     databaseURL: string;
     keyFile: string;
 }
 
-const envConfigs: Record<string, EnvConfig> = {
+const envConfigs: Record<Environment, EnvConfig> = {
     dev: {
         databaseURL: "https://crafted-dev-v1-default-rtdb.firebaseio.com",
         keyFile: "config/devServiceAccountKey.json",
@@ -21,12 +22,8 @@ const envConfigs: Record<string, EnvConfig> = {
     },
 };
 
-const env = process.env.NODE_ENV || "dev";
+const env = resolveEnvironment();
 const config = envConfigs[env];
-
-if (!config) {
-    throw new Error(`Unknown NODE_ENV "${env}". Expected one of: ${Object.keys(envConfigs).join(", ")}`);
-}
 
 const keyPath = path.resolve(__dirname, "..", config.keyFile);
 
