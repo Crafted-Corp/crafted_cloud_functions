@@ -12,10 +12,10 @@ const h = vi.hoisted(() => ({
 vi.mock("@sendgrid/mail", () => ({ default: { setApiKey: vi.fn(), send: h.send } }));
 vi.mock("../lib/firebase", () => ({ default: {} }));
 
+// Imported after the mocks so the real module load compiles the real templates.
 import type { OutreachDatabase } from "../lib/email";
 import { sendOutreachEmails } from "../lib/email";
 import type { Environment } from "../lib/environment";
-// Imported after the mocks so the real module load compiles the real templates.
 import { getCreatorTasksUrl, resolveEnvironment } from "../lib/environment";
 import type { MatchedCreator } from "../lib/scanner";
 import type { AmplifyOutreachRequest, OutreachRequest, StudioOutreachRequest } from "../lib/schemas";

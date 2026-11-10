@@ -1,7 +1,3 @@
-/**
- * Deployment environment resolution, shared by every module that varies by NODE_ENV.
- */
-
 export const ENVIRONMENTS = ["dev", "staging", "prod"] as const;
 
 export type Environment = (typeof ENVIRONMENTS)[number];
