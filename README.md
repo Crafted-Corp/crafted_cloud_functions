@@ -803,3 +803,25 @@ From the repo root, the same gate as `creator-outreach`: `npm ci`, `npm run chec
 `functions/<name>/config/devServiceAccountKey.json`, then `cd functions/<name> && NODE_ENV=dev npm run dev`
 and `POST` to `localhost:8080` with `?user_id=<run-tagged dev creator>`. A local run with the prod key
 writes production data.
+
+
+## Daily Instagram comments
+
+`functions/process-instagram-comments` is a strict TypeScript, Nx/Biome/vitest workspace. It imports all available top-level comments from submitted Instagram posts and replaces only `influencer_campaigns/<campaign>/instagram_comments/<post>` after the complete fetch succeeds. Failed provider pages retain previously stored comments. It supports Instagram Login and Facebook-connected credentials; it does not send replies or use webhooks.
+
+`instagram-comments-build.yml` runs checks, cold-start smoke and a standalone buildpack preview on PRs. Push to `dev` deploys `process-instagram-comments-dev`; push to `main` deploys `process-instagram-comments-staging`. `instagram-comments-deploy-prod.yml` manually promotes a reviewed ref. All functions share the hosting GCP project and use private invocation. NODE_ENV and the Firebase key select the separate data environment and must match. The deployed target is always `process-instagram-comments`.
+
+Each environment uses daily cron `0 6 * * *`, timezone `America/New_York`, POST and OIDC with the function URI as audience. New dev/staging scheduler jobs are created; existing paused jobs stay paused. Updates never resume paused jobs. Production deployment does not create a missing scheduler; cutover is explicit to prevent simultaneous legacy and modern writers.
+
+Prerequisites are repo variables `GCP_PROJECT`, `GCP_REGION` and existing `RATE_REFRESH_INVOKER_SA`; repo secrets `GCP_SA_KEY`, `SENTRY_DSN`; and `FIREBASE_SA_KEY` in each GitHub environment. Reuse the private rate-worker invoker setup: deployer may act as the invoker and manage the named scheduler/Cloud Run invoker binding, and Cloud Scheduler's service agent may mint OIDC tokens. The invoker requires Cloud Run invocation only on the selected function. Configure production deployment branch protection and required reviewers in the prod environment before promotion if approval gating is required; a manual workflow alone is not reviewer approval.
+
+To refresh one campaign, POST the private function URL with `?campaign_id=<campaign-id>` and a Google identity token whose audience is the function URI. The response includes `campaigns`, `postsProcessed`, `commentsCollected`, `skipped`, `failed`; inspect failed/skipped counts rather than assuming HTTP 200 means every post synced. No campaign parameter runs the daily scan. Never invoke the legacy production URL for dev testing.
+
+Before production cutover, deploy the new private production function without creating its scheduler. Then inspect and pause the legacy scheduler, verify it is PAUSED and its last execution has drained, and create the new schedule:
+
+    gcloud scheduler jobs pause processInstagramComments --project="$PROJECT" --location="$REGION"
+    gcloud scheduler jobs describe processInstagramComments --project="$PROJECT" --location="$REGION"
+    URI=$(gcloud functions describe process-instagram-comments-prod --gen2 --project="$PROJECT" --region="$REGION" --format='value(serviceConfig.uri)')
+    gcloud scheduler jobs create http process-instagram-comments-prod --project="$PROJECT" --location="$REGION" --schedule='0 6 * * *' --time-zone=America/New_York --uri="$URI" --http-method=POST --oidc-service-account-email="$INVOKER_SA" --oidc-token-audience="$URI" --attempt-deadline=1800s --max-retry-attempts=0
+
+Do not create the replacement until the legacy execution has stopped; inspect Cloud Run request logs and execution completion. If a replacement scheduler already exists, update it instead, inspect its state and resume only as an explicit cutover action. Roll back by pausing and draining the new scheduler before resuming `processInstagramComments`; never run both production schedules together. Restore the prior serving revision with `gcloud run services update-traffic <function-name> --project="$PROJECT" --region="$REGION" --to-revisions="<previous-revision>=100"` when needed. Keep legacy source/deployment available until the production migration is accepted.

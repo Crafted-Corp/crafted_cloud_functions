@@ -14,8 +14,9 @@ Amplify campaign reporting should receive the complete available Instagram comme
 - [x] (2026-11-11) Read current cloud instructions, legacy worker, modern private rate workers and their deployment pipelines; scoped worktree `feature/instagram-comments-modernization-crafted_cloud_functions`, branch `feature/instagram-comments-modernization`, base `b07bb87`.
 - [x] (2026-11-11) Coordinator identified the existing production-targeting legacy deployment and the authorized dev test campaign; recorded isolation and cutover constraints before implementation.
 - [x] (2026-11-11) Implemented typed worker, complete comments pagination, compatible storage and failure preservation; added focused regressions. Preliminary development runs passed 29 tests and worker typecheck; final measured integrated gates remain below.
-- [ ] Add standalone build, workspace integration, private CI/CD and daily scheduler lifecycle with durable README instructions.
-- [ ] Run final measured checks and obtain one combined technical review; coordinator commits/pushes and opens the PR.
+- [x] (2026-11-11) Added standalone build/workspace integration, private per-stage pipelines, daily scheduler lifecycle and durable operator instructions.
+- [x] (2026-11-11) Final measured gates and the combined technical review passed; corrected one stale member-count sentence in canonical/generated guidance.
+- [ ] Coordinator publishes the reviewed PR, then performs the authorized dev rollout and synchronization.
 - [ ] Coordinator deploys dev, verifies private invocation and daily schedule, synchronizes the single authorized dev campaign and records sanitized results.
 - [ ] Staging and production promotion remain pipeline/operator steps; do not claim them complete from dev evidence.
 
@@ -40,7 +41,7 @@ Decision (2026-11-11, tech lead): Use current credential state from `users/<crea
 ## Outcomes & Retrospective
 
 
-Planning is complete; implementation and verification are pending. No production invocation, test or deployment change has been authorized for this delivery phase. No frontend, webhook, real-time comments, replies, other function modernization or maintenance-folder changes are included.
+Implementation and required verification are complete, and the combined technical review returned GO. Publication and authorized dev deployment/synchronization remain. No production invocation, test or deployment change has been authorized for this delivery phase. No frontend, webhook, real-time comments, replies, other function modernization or maintenance-folder changes are included.
 
 ## Context and Orientation
 
@@ -139,3 +140,19 @@ Created the self-contained delivery plan from the current private scheduled work
 ## Revision note — runtime milestone, 2026-11-11
 
 Created the typed package and workspace/standalone locks. Development checks used Node v22.22.0: `npm run typecheck -w process-instagram-comments` passed and `npm run test:ci -w process-instagram-comments` reported 2 suites/29 passing tests (Vitest reported 443ms; wall time was not measured). These preliminary observations are not the final measured evidence. Pipeline, packaging, documentation and final checks are in progress.
+
+## Final implementation evidence — 2026-11-11
+
+
+Final executable/pipeline digest `d7f60b2bfb3e2e81f932dd65dbd72f03cdb722e1ea2623d6ba9015849695231f`; Node v22.23.4; isolated root dependency lock SHA-256 `16c74bd5faf6cf23ad3623302f0ec7e11fb9f54ebb41f7004f2c8a5e4aa5f5b9`. Artifacts are outside git in `.agent-runtime/comments-modernization-20261111/`. Tests use Firebase doubles; standalone cold start uses a generated dummy dev key and performs no live database work.
+
+`npm run check:ci` passed in 4.625s; `npm run typecheck` passed in 6.565s; `npm run test:ci` passed in 7.027s (17 suites, 206 tests across four workers; new worker 29 tests); `npm run build` passed in 5.326s. Standalone deployment-copy `npm ci` passed in 2.824s, `npm run gcp-build` passed in 1.455s, and compiled functions-framework GET returned exactly405 in the 289ms cold-start probe. Actual scheduler shell tests passed enabled, paused, missing-dev, missing-prod and permission-denied scenarios (20/24/23/14/14ms). All three new workflow/action YAML files parsed and diff whitespace passed.
+
+The exact CI `pack build process-instagram-comments-dryrun --path functions/process-instagram-comments --builder gcr.io/buildpacks/builder:google-22 --env GOOGLE_FUNCTION_TARGET=process-instagram-comments --env GOOGLE_RUNTIME=nodejs22 --env GOOGLE_NODEJS_VERSION=22` passed in 119.264s using pack0.40.8 and Docker29.9.2, producing image `d14128c7e426`. Standalone lock SHA-256 `d76fd6ca23eec199f98a348eacd952ff4a39cf01bfe72fae061230f4e6c43371`. No cloud credentials were supplied. Runtime/package source was frozen throughout.
+
+Final combined technical review: GO, no blocking findings. The only correction was changing the documented workspace count from three to four and regenerating AGENTS.md; executable evidence remains applicable. Live deployment and persisted comment counts must be recorded separately below.
+
+## Revision note — delivery checks, 2026-11-11
+
+
+Updated Progress and Outcomes for the completed typed worker, per-stage daily pipelines, standalone packaging checks and final technical review. Dev rollout and scoped synchronization remain the authorized next milestone; staging/production promotion are not claimed.

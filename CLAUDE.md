@@ -38,7 +38,8 @@ functions/
 ├── refresh-tiktok-rates/          ← Monthly TikTok suggested-rate refresh (TypeScript template)
 ├── getBalancedUsers/              ← Retrieves users with balances
 ├── loadUsers/                     ← Loads/reformats user data
-├── processInstagramComments/      ← Processes Instagram post comments
+├── process-instagram-comments/   ← Daily private Instagram comment synchronization (TypeScript)
+├── processInstagramComments/      ← Legacy production deployment retained for cutover
 ├── refreshAllCampaignAnalytics/   ← Refreshes TikTok + Instagram campaign analytics
 ├── refreshTokens/                 ← Refreshes social API auth tokens
 ├── updateCampaignCreatorSocials/  ← Updates creator social data in campaigns
@@ -58,7 +59,7 @@ The `maintenance/` directory holds data migration and one-off scripts (asset/dra
 ## Tooling & Standards (creator-outreach reference)
 
 `functions/creator-outreach/` is the **modernization reference**; `functions/refresh-instagram-rates/`
-and `functions/refresh-tiktok-rates/` are the other two functions on the tooling below. **Every
+`functions/refresh-tiktok-rates/` and `functions/process-instagram-comments/` are also on the tooling below. **Every
 other function in `functions/` remains on the legacy per-directory JavaScript pattern**
 (standalone `package.json`, no shared lint/type/test, no CI) documented in the rest of this file.
 Migrating the rest to this template is future, separately green-lit work.
@@ -66,10 +67,10 @@ Full design context: `.agent/exec-plans/creator-outreach-modernization.md`.
 
 - **npm workspace + Nx.** The repo root is a private npm workspace (`workspaces: ["packages/*",
   "functions/creator-outreach", "functions/refresh-instagram-rates",
-  "functions/refresh-tiktok-rates"]`) orchestrated by Nx. Root scripts fan out per-project via
+  "functions/refresh-tiktok-rates", "functions/process-instagram-comments"]`) orchestrated by Nx. Root scripts fan out per-project via
   `nx run-many -t <target>`: `npm run check:ci`, `npm run typecheck`, `npm run test:ci`,
-  `npm run build`. Only those three functions are members, so these never touch the legacy functions.
-- **TypeScript.** The three members are strict TypeScript; CI runs an explicit `tsc --noEmit`
+  `npm run build`. Only those four functions are members, so these never touch the legacy functions.
+- **TypeScript.** The four members are strict TypeScript; CI runs an explicit `tsc --noEmit`
   typecheck in addition to the build. Runtime is `nodejs22` throughout (`engines`, `.nvmrc`,
   `tsc` `target: ES2022`, the `google-22` buildpack builder, and every `--runtime=nodejs22`).
 - **Biome** via `@crafted/shared-config` (`packages/shared-config/`, mirror of crafted-src): the

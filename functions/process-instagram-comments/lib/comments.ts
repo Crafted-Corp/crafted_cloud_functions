@@ -87,7 +87,7 @@ export const collectComments = async (
         }
         const paging = body.paging === undefined ? null : record(body.paging);
         if (body.paging !== undefined && !paging) throw new CommentFetchError("pagination");
-        if (!paging?.next) break;
+        if (!paging || paging.next === undefined) break;
         const cursor = record(paging.cursors)?.after;
         if (typeof paging.next !== "string" || !text(cursor) || seen.has(cursor) || body.data.length === 0)
             throw new CommentFetchError("pagination");
