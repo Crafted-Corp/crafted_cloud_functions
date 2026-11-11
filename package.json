@@ -6,7 +6,8 @@
     "packages/*",
     "functions/creator-outreach",
     "functions/refresh-instagram-rates",
-    "functions/refresh-tiktok-rates"
+    "functions/refresh-tiktok-rates",
+    "functions/process-instagram-comments"
   ],
   "scripts": {
     "prepare": "husky",
