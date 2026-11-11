@@ -16,9 +16,9 @@ Amplify campaign reporting should receive the complete available Instagram comme
 - [x] (2026-11-11) Implemented typed worker, complete comments pagination, compatible storage and failure preservation; added focused regressions. Preliminary development runs passed 29 tests and worker typecheck; final measured integrated gates remain below.
 - [x] (2026-11-11) Added standalone build/workspace integration, private per-stage pipelines, daily scheduler lifecycle and durable operator instructions.
 - [x] (2026-11-11) Final measured gates and the combined technical review passed; corrected one stale member-count sentence in canonical/generated guidance.
-- [ ] Coordinator publishes the reviewed PR, then performs the authorized dev rollout and synchronization.
-- [ ] Coordinator deploys dev, verifies private invocation and daily schedule, synchronizes the single authorized dev campaign and records sanitized results.
-- [ ] Staging and production promotion remain pipeline/operator steps; do not claim them complete from dev evidence.
+- [x] (2026-11-11) Published [cloud PR #32](https://github.com/Crafted-Corp/crafted_cloud_functions/pull/32) with reviewed implementation and pipeline changes.
+- [x] (2026-11-11 19:07Z) Deployed private dev worker, enabled the daily OIDC scheduler, synchronized the authorized campaign and verified 11 persisted comments; legacy production function and scheduler metadata are unchanged.
+- [x] (2026-11-11) Recorded rollout boundary: staging and production promotion are provided by the pipelines and remain operator steps, outside this live dev delivery.
 
 ## Surprises & Discoveries
 
@@ -41,7 +41,7 @@ Decision (2026-11-11, tech lead): Use current credential state from `users/<crea
 ## Outcomes & Retrospective
 
 
-Implementation and required verification are complete, and the combined technical review returned GO. Publication and authorized dev deployment/synchronization remain. No production invocation, test or deployment change has been authorized for this delivery phase. No frontend, webhook, real-time comments, replies, other function modernization or maintenance-folder changes are included.
+Implementation, required verification, technical review and publication in cloud PR #32 are complete. The private dev worker and daily scheduler are deployed; the review campaign now has 11 freshly synchronized comments. Staging/production promotion remains an operator action, and legacy production metadata is unchanged. No production invocation, test or deployment change has been authorized for this delivery phase. No frontend, webhook, real-time comments, replies, other function modernization or maintenance-folder changes are included.
 
 ## Context and Orientation
 
@@ -57,7 +57,7 @@ All environments host functions in GCP project `crafted-dev-v1`, region `us-cent
 
 The private HTTP entry point accepts POST. Other methods return 405 before database/network work; retain the CORS wrapper pattern without making the service publicly invokable. Absent `campaign_id` scans campaigns in ascending Firebase key pages of 100 using `orderByKey`, `limitToFirst` and `startAfter`; do not read the full campaign collection. A single valid campaign_id reads only that campaign and returns 404 if missing. Reject repeated/array/empty/path-invalid query identifiers with 400. POST without a body remains scheduler-compatible. Preserve useful legacy summary fields `campaigns`, `postsProcessed`, `commentsCollected`, `skipped`; add an explicit failed count so partial failure is observable rather than falsely reported as complete success.
 
-Within a campaign, visit its tasks/posts in bounded work, skip non-Instagram posts, and retain compatibility for legacy posts with an absent platform only when their existing Instagram provenance is established from the record shape. Do not treat an explicitly TikTok post as Instagram. The builder must inspect actual post shapes before selecting this narrow legacy predicate and record it here. Missing media_id, creator_id, account ID or token is a skip; corrupt structures are reported as sanitized failures. Read only the current creator's Instagram social node, never the entire users collection.
+Within a campaign, visit its tasks/posts in bounded work, skip non-Instagram posts, and retain compatibility for legacy posts with an absent platform only when their existing Instagram provenance is established from the record shape. Do not treat an explicitly TikTok post as Instagram. The implemented legacy predicate requires absent platform, a media_id, and an HTTPS instagram.com or www.instagram.com post link, in addition to a usable current Instagram social connection. Missing media_id, creator_id, account ID or token is a skip; corrupt structures are reported as sanitized failures. Read only the current creator's Instagram social node, never the entire users collection.
 
 Use fixed Graph hosts chosen from stored api_path. Fetch `/<media_id>/comments` with the fields needed by existing client comment consumers, at minimum id/text/username/timestamp; preserve returned extra comment fields where compatible instead of dropping existing client data. Type raw vendor JSON as unknown and narrow it without any or double unknown casts. Request comments pages using vendor cursor values on the same fixed media endpoint; never send credentials to an arbitrary paging.next URL. Stop only on genuine vendor exhaustion. Detect repeated/malformed cursors and fail without writing a partial list. Deduplicate repeated comment IDs while retaining stable page order. Do not fetch replies or introduce sentiment processing.
 
@@ -156,3 +156,19 @@ Final combined technical review: GO, no blocking findings. The only correction w
 
 
 Updated Progress and Outcomes for the completed typed worker, per-stage daily pipelines, standalone packaging checks and final technical review. Dev rollout and scoped synchronization remain the authorized next milestone; staging/production promotion are not claimed.
+
+## Live dev deployment and sync — 2026-11-11
+
+
+Reviewed runtime commit `9ea99f2dc0ee60190815bd5131aedf4a59e160d7` is deployed as `process-instagram-comments-dev` in `crafted-dev-v1/us-central1`, Node22, private Gen2, one instance/concurrency one, 1CPU/2Gi, timeout1800s. The deployment command mirrors the checked-in composite action and passed in 77.485s. The materialized credential project was asserted as crafted-dev-v1, NODE_ENV=dev, with the existing dev worker's monitoring configuration. Secret values remain private; deployment artifacts contain only safe identities/fingerprints.
+
+Scheduler `process-instagram-comments-dev` is ENABLED at `0 6 * * *`, America/New_York. It sends POST to the new dev service URI, with OIDC audience matching the service URI and the existing rate-refresh-invoker identity. IAM inspection confirmed no allUsers/allAuthenticatedUsers grant. Scheduler provisioning/verification passed in 14.161s. The future scheduled tick has not been observed; the authenticated scoped invocation below establishes worker behavior independently.
+
+The coordinator re-read the authorized campaign/brand/task/post/creator relationships and backed up only its comment node privately before calling the worker. Unauthenticated GET returned403, authenticated GET returned405, and authenticated POST with the campaign_id query returned200 in the 1.150s scoped run: campaigns=1, postsProcessed=1, commentsCollected=11, skipped=0, failed=0. Read-back verified 11 comment objects with the expected id/text shape at the existing per-post node. No comment text, credentials or tokens appear in the sanitized evidence. No emails or campaign metrics were changed by this comments-only invocation.
+
+Artifacts: `.agent-runtime/instagram-comments-modernization-20261111/{dev-deploy.json,dev-scheduler.json,dev-sync.json,production-topology-unchanged.json}`. Before/after metadata comparisons confirmed the legacy production function and enabled daily job unchanged. No production invocation or Firebase testing occurred. PR CI at the reviewed runtime commit showed all quality, cold-start and build-preview checks successful; feature-branch deploy jobs were correctly skipped. This documentation-only completion commit does not change the reviewed/deployed runtime.
+
+## Revision note — live completion, 2026-11-11
+
+
+Recorded PR publication, measured private dev deployment, authenticated daily scheduler and successful scoped 11-comment synchronization. Updated Outcomes and the exact legacy-post predicate. Explicitly retained unperformed staging/production promotion and first scheduled tick as live-verification boundaries.
