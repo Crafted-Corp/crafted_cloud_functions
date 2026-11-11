@@ -13,7 +13,7 @@ Amplify campaign reporting should receive the complete available Instagram comme
 
 - [x] (2026-11-11) Read current cloud instructions, legacy worker, modern private rate workers and their deployment pipelines; scoped worktree `feature/instagram-comments-modernization-crafted_cloud_functions`, branch `feature/instagram-comments-modernization`, base `b07bb87`.
 - [x] (2026-11-11) Coordinator identified the existing production-targeting legacy deployment and the authorized dev test campaign; recorded isolation and cutover constraints before implementation.
-- [ ] Implement typed worker, paginated reads, compatible comment projection and failure-preserving storage; run focused regressions.
+- [x] (2026-11-11) Implemented typed worker, complete comments pagination, compatible storage and failure preservation; added focused regressions. Preliminary development runs passed 29 tests and worker typecheck; final measured integrated gates remain below.
 - [ ] Add standalone build, workspace integration, private CI/CD and daily scheduler lifecycle with durable README instructions.
 - [ ] Run final measured checks and obtain one combined technical review; coordinator commits/pushes and opens the PR.
 - [ ] Coordinator deploys dev, verifies private invocation and daily schedule, synchronizes the single authorized dev campaign and records sanitized results.
@@ -135,3 +135,7 @@ Use functions-framework HttpFunction, Firebase Admin SDK, existing Sentry major 
 
 
 Created the self-contained delivery plan from the current private scheduled workers and legacy comment processor. Pinned environment isolation, complete pagination, compatible storage, failure safety, private daily scheduling and gated production cutover; authorized only dev deployment/synchronization in the live phase.
+
+## Revision note — runtime milestone, 2026-11-11
+
+Created the typed package and workspace/standalone locks. Development checks used Node v22.22.0: `npm run typecheck -w process-instagram-comments` passed and `npm run test:ci -w process-instagram-comments` reported 2 suites/29 passing tests (Vitest reported 443ms; wall time was not measured). These preliminary observations are not the final measured evidence. Pipeline, packaging, documentation and final checks are in progress.
