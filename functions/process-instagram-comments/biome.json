@@ -1,0 +1,4 @@
+{
+    "extends": ["@crafted/shared-config/biome"],
+    "files": { "includes": ["!node_modules", "!coverage", "!config", "!dist"] }
+}

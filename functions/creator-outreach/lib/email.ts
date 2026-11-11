@@ -10,6 +10,7 @@ import path from "node:path";
 import sgMail from "@sendgrid/mail";
 import type * as admin from "firebase-admin";
 import Handlebars from "handlebars";
+import { getCreatorTasksUrl, resolveEnvironment } from "./environment";
 import type { MatchedCreator } from "./scanner";
 import type { AmplifyOutreachRequest, OutreachRequest, StudioOutreachRequest } from "./schemas";
 
@@ -17,10 +18,33 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY as string);
 
 const FROM = "Crafted <team@usecrafted.com>";
 
-const studioTemplate = Handlebars.compile(
+interface StudioTemplateData {
+    name: string;
+    brand_name: string;
+    brand_email: string;
+    task_name: string;
+    note1: string;
+    note2: string;
+    note3: string;
+    brief_link: string;
+    price: string;
+    application_url: string;
+}
+
+interface AmplifyTemplateData {
+    name: string;
+    brand_name: string;
+    brand_email: string;
+    message: string;
+    campaign_name: string;
+    suggested_rate: number;
+    application_url: string;
+}
+
+const studioTemplate = Handlebars.compile<StudioTemplateData>(
     fs.readFileSync(path.resolve(__dirname, "../templates/StudioBriefInvite.hbs"), "utf8"),
 );
-const amplifyTemplate = Handlebars.compile(
+const amplifyTemplate = Handlebars.compile<AmplifyTemplateData>(
     fs.readFileSync(path.resolve(__dirname, "../templates/CampaignInviteInNetwork.hbs"), "utf8"),
 );
 
@@ -28,6 +52,11 @@ export interface BlastResults {
     messages: string;
     sent: number;
     failed: number;
+}
+
+// Email sending only reads values, so it asks for that surface instead of a full Admin app.
+export interface OutreachDatabase {
+    database(): { ref(path: string): { once(eventType: "value"): Promise<Pick<admin.database.DataSnapshot, "val">> } };
 }
 
 interface BrandData {
@@ -53,7 +82,7 @@ interface SendGridResponse {
 
 type SendGridSendResult = Array<[SendGridResponse, unknown]>;
 
-const fetchBrandData = async (firebase: admin.app.App, brandId: string): Promise<BrandData> => {
+const fetchBrandData = async (firebase: OutreachDatabase, brandId: string): Promise<BrandData> => {
     const [brandNameSnap, brandEmailSnap] = await Promise.all([
         firebase.database().ref(`brands/${brandId}/brand_name`).once("value"),
         firebase.database().ref(`brands/${brandId}/email`).once("value"),
@@ -61,7 +90,7 @@ const fetchBrandData = async (firebase: admin.app.App, brandId: string): Promise
     return { brandName: brandNameSnap.val(), brandEmail: brandEmailSnap.val() };
 };
 
-const fetchAdminPrices = async (firebase: admin.app.App): Promise<AdminPrices> => {
+const fetchAdminPrices = async (firebase: OutreachDatabase): Promise<AdminPrices> => {
     const snap = await firebase.database().ref("admin/pricing").once("value");
     return snap.val();
 };
@@ -89,11 +118,12 @@ export const calculateAmplifySuggestedRate = (
     amplifyVideoPriceCents / 100;
 
 const sendStudioEmails = async (
-    firebase: admin.app.App,
+    firebase: OutreachDatabase,
     data: StudioOutreachRequest,
     creators: MatchedCreator[],
 ): Promise<BlastResults> => {
     const brand = await fetchBrandData(firebase, data.brand_id);
+    const applicationUrl = getCreatorTasksUrl(resolveEnvironment());
 
     const personalizations: EmailPersonalization[] = [];
 
@@ -110,6 +140,7 @@ const sendStudioEmails = async (
             note3: data.task.note3 || "",
             brief_link: data.task.brief_link || "",
             price: (data.task.price / 100).toFixed(2),
+            application_url: applicationUrl,
         });
 
         personalizations.push({
@@ -131,12 +162,13 @@ const sendStudioEmails = async (
 };
 
 const sendAmplifyEmails = async (
-    firebase: admin.app.App,
+    firebase: OutreachDatabase,
     data: AmplifyOutreachRequest,
     creators: MatchedCreator[],
 ): Promise<BlastResults> => {
     const brand = await fetchBrandData(firebase, data.brand_id);
     const prices = await fetchAdminPrices(firebase);
+    const applicationUrl = getCreatorTasksUrl(resolveEnvironment());
 
     const personalizations: EmailPersonalization[] = [];
 
@@ -162,6 +194,7 @@ const sendAmplifyEmails = async (
             message: data.message || "",
             campaign_name: data.campaign_name || "",
             suggested_rate: suggestedRate || 0,
+            application_url: applicationUrl,
         });
 
         personalizations.push({
@@ -182,7 +215,7 @@ const sendAmplifyEmails = async (
 };
 
 export const sendOutreachEmails = async (
-    firebase: admin.app.App,
+    firebase: OutreachDatabase,
     data: OutreachRequest,
     creators: MatchedCreator[],
 ): Promise<BlastResults> => {
