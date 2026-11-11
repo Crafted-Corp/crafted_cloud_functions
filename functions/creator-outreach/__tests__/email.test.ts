@@ -1,5 +1,4 @@
 import sgMail from "@sendgrid/mail";
-import type * as admin from "firebase-admin";
 
 vi.mock("@sendgrid/mail", () => ({
     default: { setApiKey: vi.fn(), send: vi.fn() },
@@ -9,26 +8,32 @@ vi.mock("../lib/firebase", () => ({ default: {} }));
 // Imported after the mocks so the real module load exercises the real
 // path.resolve(__dirname, "../templates/*.hbs") reads — a failed import here
 // is itself the template-path regression guard.
+import type { OutreachDatabase } from "../lib/email";
 import { calculateAmplifySuggestedRate, extractResults, sendOutreachEmails } from "../lib/email";
 import type { MatchedCreator } from "../lib/scanner";
 import type { AmplifyOutreachRequest } from "../lib/schemas";
 
-const fakeFirebase = () =>
-    ({
-        database: () => ({
-            ref: (path: string) => ({
-                once: async () => {
-                    if (path.endsWith("/brand_name")) return { val: () => "BrandName" };
-                    if (path.endsWith("/email")) return { val: () => "brand@x.com" };
-                    if (path === "admin/pricing") return { val: () => ({ creator_amplify_video_price: 5000 }) };
-                    return { val: () => null };
-                },
-            }),
+const fakeFirebase = (): OutreachDatabase => ({
+    database: () => ({
+        ref: (path: string) => ({
+            once: async () => {
+                if (path.endsWith("/brand_name")) return { val: () => "BrandName" };
+                if (path.endsWith("/email")) return { val: () => "brand@x.com" };
+                if (path === "admin/pricing") return { val: () => ({ creator_amplify_video_price: 5000 }) };
+                return { val: () => null };
+            },
         }),
-    }) as unknown as admin.app.App;
+    }),
+});
 
 beforeEach(() => {
     vi.clearAllMocks();
+    // Vitest runs with NODE_ENV=test, which the outreach emails reject as an unknown environment.
+    vi.stubEnv("NODE_ENV", "dev");
+});
+
+afterEach(() => {
+    vi.unstubAllEnvs();
 });
 
 describe("extractResults", () => {
