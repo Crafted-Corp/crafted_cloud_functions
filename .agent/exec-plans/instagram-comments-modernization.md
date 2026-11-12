@@ -23,7 +23,7 @@ Amplify campaign reporting should receive the complete available Instagram comme
 - [x] (2026-11-12) Observed the natural production run read-only and reproduced the missing-text compatibility regression locally. The user authorized the correction; opened worktree `fix/instagram-comment-text-crafted_cloud_functions`, branch `fix/instagram-comment-text`, from `origin/dev` at `dc4d20d` because PR #32 has merged.
 - [x] (2026-11-12) Preserved omitted comment text and added sanitized shape regressions. Both new acceptance regressions failed before the correction; all four final root checks passed afterward.
 - [x] (2026-11-12) Combined technical review: GO, with no blocking code findings. Corrected two stale historical plan statements; executable evidence remains applicable.
-- [ ] (2026-11-12) Publish the correction PR.
+- [x] (2026-11-12) Published the reviewed correction in [cloud PR #33](https://github.com/Crafted-Corp/crafted_cloud_functions/pull/33), targeting `dev`. Live deployment and post-deployment verification remain operator steps.
 
 ## Surprises & Discoveries
 
@@ -50,7 +50,7 @@ Decision (2026-11-11, tech lead): Use current credential state from `users/<crea
 ## Outcomes & Retrospective
 
 
-The original implementation, required verification, technical review and publication in cloud PR #32 completed, followed by separately authorized production promotion. The missing-text correction and its local required checks now pass; the combined technical review is GO and publication is pending. The legacy scheduler remains paused and available for rollback; its deletion condition has not been met. This correction uses local tests only and does not invoke production or deploy changes. No frontend, webhook, real-time comments, replies, other function modernization or maintenance-folder changes are included.
+The original implementation, required verification, technical review and publication in cloud PR #32 completed, followed by separately authorized production promotion. The missing-text correction, passing local required checks and combined technical review GO are published in cloud PR #33. The legacy scheduler remains paused and available for rollback; its deletion condition has not been met. This correction uses local tests only and does not invoke production or deploy changes. No frontend, webhook, real-time comments, replies, other function modernization or maintenance-folder changes are included.
 
 ## Context and Orientation
 
@@ -192,3 +192,8 @@ Recorded PR publication, measured private dev deployment, authenticated daily sc
 
 
 Recorded subsequent authorized production cutover, the observed natural run and the approved missing-text correction. Updated the current worktree, Progress, Surprises, Decision Log, Outcomes, correction steps and Comment contract. Recorded the correction's measured checks and combined technical review GO. Historical delivery evidence above remains evidence for its original source; production behavior after deployment remains unverified.
+
+## Revision note — correction publication, 2026-11-12
+
+
+Recorded correction publication in PR #33 and completed the living delivery status. This prose-only update preserves the checked executable digest; deployment and post-deployment verification remain unperformed.
