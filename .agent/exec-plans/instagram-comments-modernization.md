@@ -1,12 +1,12 @@
 # Modernize daily Instagram comment synchronization
 
 
-This ExecPlan is living guidance under `.agent/PLANS.md` and the canonical Crafted ExecPlan doctrine. Keep Progress, Surprises & Discoveries, Decision Log and Outcomes current. Implementation, a PR, dev deployment and the scoped dev synchronization are authorized. The coordinator owns git and all live cloud operations; the cloud engineer owns implementation; the tech lead owns this plan and the single combined review.
+This ExecPlan is living guidance under `.agent/PLANS.md` and the canonical Crafted ExecPlan doctrine. Keep Progress, Surprises & Discoveries, Decision Log and Outcomes current. The original implementation and separately authorized production promotion have completed. The user authorized a compatibility correction and a new PR on 2026-11-12; deployment of that correction is a later operator step. The coordinator owns git, plan updates and live cloud operations; the cloud engineer owns implementation; the tech lead owns the single combined review.
 
 ## Purpose / Big Picture
 
 
-Amplify campaign reporting should receive the complete available Instagram comments for submitted posts through a typed, independently deployable daily worker. It must work with both Facebook-connected Instagram credentials and Instagram Login credentials, preserve the existing client data shape, and never erase stored comments because Meta rejected a request. Developers gain tested source, isolated dev/staging/prod deployments and a daily private scheduler. The existing production schedule remains running until an explicit production cutover.
+Amplify campaign reporting should receive the complete available Instagram comments for submitted posts through a typed, independently deployable daily worker. It must work with both Facebook-connected Instagram credentials and Instagram Login credentials, preserve the existing client data shape, and never erase stored comments because Meta rejected a request. Developers gain tested source, isolated dev/staging/prod deployments and a daily private scheduler. After the authorized production cutover, the new daily schedule is enabled and the legacy schedule remains paused for rollback. The current correction preserves comments whose text is absent, allowing their post's other comments to synchronize.
 
 ## Progress
 
@@ -19,16 +19,25 @@ Amplify campaign reporting should receive the complete available Instagram comme
 - [x] (2026-11-11) Published [cloud PR #32](https://github.com/Crafted-Corp/crafted_cloud_functions/pull/32) with reviewed implementation and pipeline changes.
 - [x] (2026-11-11 19:07Z) Deployed private dev worker, enabled the daily OIDC scheduler, synchronized the authorized campaign and verified 11 persisted comments; legacy production function and scheduler metadata are unchanged.
 - [x] (2026-11-11) Recorded rollout boundary: staging and production promotion are provided by the pipelines and remain operator steps, outside this live dev delivery.
+- [x] (2026-11-11, subsequent authorization) Promoted production source `fd07037652a390924740ed730bb471e7b844b38a` through gcloud; enabled the new daily job and paused the legacy job.
+- [x] (2026-11-12) Observed the natural production run read-only and reproduced the missing-text compatibility regression locally. The user authorized the correction; opened worktree `fix/instagram-comment-text-crafted_cloud_functions`, branch `fix/instagram-comment-text`, from `origin/dev` at `dc4d20d` because PR #32 has merged.
+- [x] (2026-11-12) Preserved omitted comment text and added sanitized shape regressions. Both new acceptance regressions failed before the correction; all four final root checks passed afterward.
+- [x] (2026-11-12) Combined technical review: GO, with no blocking code findings. Corrected two stale historical plan statements; executable evidence remains applicable.
+- [x] (2026-11-12) Published the reviewed correction in [cloud PR #33](https://github.com/Crafted-Corp/crafted_cloud_functions/pull/33), targeting `dev`. Live deployment and post-deployment verification remain operator steps.
 
 ## Surprises & Discoveries
 
 
-`functions/processInstagramComments/instagram.js` already supports a `campaign_id` query and scans campaign records in pages of ten, but retrieves only the first Meta comments page and logs raw vendor error details. It writes the returned comment array directly to `influencer_campaigns/<campaign>/instagram_comments/<post>`. It does not reliably exclude non-Instagram posts before using their media IDs. The legacy deployment is hosted in `crafted-dev-v1` but selects production RTDB `crafted-v1`; hosting project names do not identify data environment. The coordinator confirmed its scheduler remains enabled at 06:00 America/New_York, the reusable scheduler invoker exists, and FIREBASE_SA_KEY is already configured in each GitHub environment. The client flattenCampaignComments consumer accepts the flat comment array, which remains unchanged.
+The 2026-11-12 natural production run completed HTTP200 with 124 Meta190 errors, 23 Meta100 errors and 12 malformed outcomes. The previous legacy run had the same aggregate provider-error counts. Approved read-only inspection of stored production comments found 39 objects without text across 22 posts. A local comparison confirmed that legacy code accepts this shape and the new collector rejects an entire post for it. These historical stored shapes do not prove the cause of all 12 current malformed responses. The client already excludes missing-text objects from sentiment analysis, so retaining them needs no frontend change.
+
+`functions/processInstagramComments/instagram.js` already supports a `campaign_id` query and scans campaign records in pages of ten, but retrieves only the first Meta comments page and logs raw vendor error details. It writes the returned comment array directly to `influencer_campaigns/<campaign>/instagram_comments/<post>`. It does not reliably exclude non-Instagram posts before using their media IDs. The legacy deployment is hosted in `crafted-dev-v1` but selects production RTDB `crafted-v1`; hosting project names do not identify data environment. At initial inspection its scheduler was enabled at 06:00 America/New_York; the subsequent authorized cutover paused it. The reusable scheduler invoker exists and FIREBASE_SA_KEY is configured in each GitHub environment. The client flattenCampaignComments consumer accepts the flat comment array, which remains unchanged.
 
 `functions/refresh-instagram-rates` and `functions/refresh-tiktok-rates` are the closest existing private scheduled templates. Their action caps instances/concurrency, grants one invoker service account, preserves paused scheduler state and supplies OIDC (a Google-signed identity token) with the function URL as audience. Their monthly cron and America/Cancun timezone are not the comments schedule. Their Firebase module defaults absent NODE_ENV to dev; this worker must instead reject absent/unknown environments.
 
 ## Decision Log
 
+
+Decision (2026-11-12, coordinator): Make `Comment.text` optional and reject only a present non-string text value. Preserve the original object, its ID/timestamp and its peers; never synthesize empty text or discard the object. Keep optional username/timestamp validation and provider, pagination and write-failure behavior unchanged. The demonstrated compatibility defect is the authorized scope; no dependency, schedule, frontend or maintenance-folder change is needed.
 
 Decision (2026-11-11, tech lead): Add `functions/process-instagram-comments` and its own deployment action/workflows; leave the legacy source/deployment and monthly worker behavior intact. This permits isolated dev delivery and safe gated production cutover without dual production writers.
 
@@ -41,12 +50,12 @@ Decision (2026-11-11, tech lead): Use current credential state from `users/<crea
 ## Outcomes & Retrospective
 
 
-Implementation, required verification, technical review and publication in cloud PR #32 are complete. The private dev worker and daily scheduler are deployed; the review campaign now has 11 freshly synchronized comments. Staging/production promotion remains an operator action, and legacy production metadata is unchanged. No production invocation, test or deployment change has been authorized for this delivery phase. No frontend, webhook, real-time comments, replies, other function modernization or maintenance-folder changes are included.
+The original implementation, required verification, technical review and publication in cloud PR #32 completed, followed by separately authorized production promotion. The missing-text correction, passing local required checks and combined technical review GO are published in cloud PR #33. The legacy scheduler remains paused and available for rollback; its deletion condition has not been met. This correction uses local tests only and does not invoke production or deploy changes. No frontend, webhook, real-time comments, replies, other function modernization or maintenance-folder changes are included.
 
 ## Context and Orientation
 
 
-Work only in `/home/gustavo/dev/crafted/.worktrees/feature/instagram-comments-modernization-crafted_cloud_functions`. The root npm workspace and Nx commands currently include creator-outreach and two rate workers. Each deployable directory has a standalone public-registry lockfile and self-contained tsconfig because Google uploads only that directory and runs `npm ci` plus `gcp-build`. Root dependencies/lockfile do not replace the nested deploy lock.
+Work on the correction only in `/home/gustavo/dev/crafted/.worktrees/fix/instagram-comment-text-crafted_cloud_functions`; the original branch is merged and frozen. The root npm workspace and Nx commands include creator-outreach, two rate workers and this comments worker. Each deployable directory has a standalone public-registry lockfile and self-contained tsconfig because Google uploads only that directory and runs `npm ci` plus `gcp-build`. Root dependencies/lockfile do not replace the nested deploy lock.
 
 The legacy source is `functions/processInstagramComments/{index.js,instagram.js,graphHost.js}`. It reads campaign tasks/posts, then current creator socials and stores comments under campaign/post IDs. Modern examples are `functions/refresh-instagram-rates/{index.ts,function-handler.ts,lib/firebase.ts,lib/graph-host.ts,lib/social-errors.ts,lib/sentry.ts,package.json,tsconfig.json,biome.json,vitest.config.ts}`. `.github/actions/deploy-rate-refresh/action.yml` and `.github/workflows/rate-refresh-{build,deploy-prod}.yml` demonstrate private deploys and scheduler lifecycle. Creator-outreach is the shared tooling/buildpack reference; it is public and its public-invocation option must not be copied.
 
@@ -98,6 +107,8 @@ Invoke exactly the authorized dev campaign `-P665xxFNjQOCZOam2xP`, owned by bran
 ## Concrete Steps
 
 
+For the compatibility correction, change only `functions/process-instagram-comments/lib/comments.ts` and typed regression tests/fixtures under its `__tests__/`. A mixed collection containing an ID/timestamp-only comment must be stored unchanged, including all valid peers. Present non-string text must still reject the collection and leave old stored comments intact. Run the four root checks below on Node22 and record durations. Packaging dependencies, manifests and workflows are unchanged; no live production test or new deployment is part of this correction.
+
 From the isolated cloud worktree, use Node22 and matched dependencies; serialize lockfile/install changes. Run the root commands after adding the workspace:
 
     npm ci --no-audit
@@ -125,12 +136,16 @@ At production promotion, inspect both legacy and new schedules, pause the legacy
 ## Artifacts and Notes
 
 
-Coordinator observations establish the current legacy production topology and dev test identifiers; implementation checks have not run yet. Store sanitized command/results, source/dependency/runtime/environment identities and durations in a private workspace evidence directory, and summarize them here after each milestone. Never commit raw credentials, vendor tokens or comment content. Read-only production topology inspection is distinct from forbidden production invocation/testing.
+Original implementation and live evidence follow below. Correction evidence is in the private workspace directory `.agent-runtime/comments-text-fix-20261112/`, outside the repo. Never commit raw credentials, vendor tokens or comment content. Read-only production observation and approved stored-shape inspection are distinct from forbidden production invocation/testing.
+
+The correction's final executable input digest is `d181a3bf4b78407e99b4b88635575e2576adb3219f41ad50faa787a563053ae0`, covering tracked and untracked non-Markdown inputs; Markdown does not feed these commands. Node v22.22.0 and npm10.9.4 used a fresh isolated `npm ci` (16.19s), with unchanged root lock `16c74bd5faf6cf23ad3623302f0ec7e11fb9f54ebb41f7004f2c8a5e4aa5f5b9` and nested lock `d76fd6ca23eec199f98a348eacd952ff4a39cf01bfe72fae061230f4e6c43371`. Environment fingerprint is `a28b3b9c7f25b21ea851e6a88039bec00696f51ac8943ac0211481698274ff7a`; no dotenv/credentials were copied and Firebase/HTTP use local doubles, so no schema identity applies. Nx cache was disabled.
+
+With the new tests and original collector, `npm run test:ci -w process-instagram-comments -- __tests__/comments.test.ts` failed the two missing-text acceptance cases while 19 others passed (1.62s). After correction, `npm run check:ci` passed in 5.121s, `npm run typecheck` in 5.977s, `npm run test:ci` in 6.257s (17 suites/213 tests, including 2 suites/36 comments tests), and `npm run build` in 6.304s. `checks.json` and adjacent logs record command/cwd, timestamps, identities and exit status. Standalone/buildpack/scheduler checks were not repeated because their inputs are unchanged; their original evidence does not claim an execution of the corrected buildpack image. No live verification or deployment of this correction has run.
 
 ## Interfaces and Dependencies
 
 
-Use functions-framework HttpFunction, Firebase Admin SDK, existing Sentry major and a typed HTTP client supported by Node22/current dependencies. Define explicit Campaign/Task/Post, InstagramConnection, Comment and run-summary shapes; narrow unknown RTDB/Graph values at boundaries. Export plain functions for scanner/collector/processing seams to enable deterministic tests. Comment storage remains `influencer_campaigns/<campaign_id>/instagram_comments/<post_id>` with the legacy array shape. The function target, manifest/start command and gcloud entry-point all equal `process-instagram-comments`; only deployed function/scheduler names receive the environment suffix.
+Use functions-framework HttpFunction, Firebase Admin SDK, existing Sentry major and a typed HTTP client supported by Node22/current dependencies. Define explicit Campaign/Task/Post, InstagramConnection, Comment and run-summary shapes; narrow unknown RTDB/Graph values at boundaries. `Comment.text` is optional; when present it must be a string. Export plain functions for scanner/collector/processing seams to enable deterministic tests. Comment storage remains `influencer_campaigns/<campaign_id>/instagram_comments/<post_id>` with the legacy array shape. The function target, manifest/start command and gcloud entry-point all equal `process-instagram-comments`; only deployed function/scheduler names receive the environment suffix.
 
 ## Revision note — 2026-11-11
 
@@ -172,3 +187,13 @@ Artifacts: `.agent-runtime/instagram-comments-modernization-20261111/{dev-deploy
 
 
 Recorded PR publication, measured private dev deployment, authenticated daily scheduler and successful scoped 11-comment synchronization. Updated Outcomes and the exact legacy-post predicate. Explicitly retained unperformed staging/production promotion and first scheduled tick as live-verification boundaries.
+
+## Revision note — compatibility correction, 2026-11-12
+
+
+Recorded subsequent authorized production cutover, the observed natural run and the approved missing-text correction. Updated the current worktree, Progress, Surprises, Decision Log, Outcomes, correction steps and Comment contract. Recorded the correction's measured checks and combined technical review GO. Historical delivery evidence above remains evidence for its original source; production behavior after deployment remains unverified.
+
+## Revision note — correction publication, 2026-11-12
+
+
+Recorded correction publication in PR #33 and completed the living delivery status. This prose-only update preserves the checked executable digest; deployment and post-deployment verification remain unperformed.

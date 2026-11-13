@@ -5,7 +5,7 @@ import { lastErrorFor, metaMessageKey } from "./social-errors";
 export type RecordValue = Record<string, unknown>;
 export interface Comment extends RecordValue {
     id: string;
-    text: string;
+    text?: string;
     timestamp?: string;
     username?: string;
 }
@@ -78,7 +78,7 @@ export const collectComments = async (
             if (
                 !item ||
                 !text(item.id) ||
-                typeof item.text !== "string" ||
+                (item.text !== undefined && typeof item.text !== "string") ||
                 (item.timestamp !== undefined && typeof item.timestamp !== "string") ||
                 (item.username !== undefined && typeof item.username !== "string")
             )
