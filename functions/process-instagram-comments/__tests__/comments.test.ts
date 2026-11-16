@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { collectComments, syncCampaign } from "../lib/comments";
+import { commentWithoutText } from "./fixtures/comment-without-text";
 
 const response = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 const comment = (id: string): { id: string; text: string } => ({ id, text: `Comment ${id}` });
 const post = { platform: "instagram", media_id: "media", creator_id: "creator" };
 const campaign = { tasks: { task: { posts: { post } } } };
 const fakeApp = () => {
-    const set = vi.fn(async (): Promise<void> => undefined);
+    const set = vi.fn(async (_value: unknown): Promise<void> => undefined);
     const ref = vi.fn(() => ({
         once: async () => ({ val: () => ({ api_path: "instagram", instagram_user_id: "ig", access_token: "secret" }) }),
         set,
@@ -46,6 +47,19 @@ describe("complete comments collection", () => {
             .mockResolvedValueOnce(response({ data: [comment("a"), comment("b")] }));
         expect((await collectComments("media", "secret", undefined, request)).map((c) => c.id)).toEqual(["a", "b"]);
     });
+    it("preserves a comment without text alongside comments from other pages", async () => {
+        const request = vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(
+                response({ data: [comment("a")], paging: { next: "next", cursors: { after: "cursor" } } }),
+            )
+            .mockResolvedValueOnce(response({ data: [commentWithoutText, comment("b")] }));
+
+        const result = await collectComments("media", "secret", "instagram", request);
+
+        expect(result).toStrictEqual([comment("a"), commentWithoutText, comment("b")]);
+        expect(result[1]).not.toHaveProperty("text");
+    });
     it.each([
         { data: [comment("a")], paging: { next: "next" } },
         { data: [{}] },
@@ -66,6 +80,49 @@ describe("complete comments collection", () => {
     });
 });
 describe("failure preserving storage", () => {
+    it("stores the complete array including a comment without text", async () => {
+        const { app, ref, set } = fakeApp();
+        const comments = [comment("a"), commentWithoutText, comment("b")];
+
+        const result = await syncCampaign(
+            app as never,
+            "campaign",
+            campaign,
+            vi.fn<typeof fetch>().mockResolvedValue(response({ data: comments })),
+        );
+
+        expect(result).toStrictEqual({
+            campaigns: 1,
+            postsProcessed: 1,
+            commentsCollected: 3,
+            skipped: 0,
+            failed: 0,
+        });
+        expect(set).toHaveBeenCalledExactlyOnceWith(comments);
+        expect(set.mock.calls[0][0]).toStrictEqual(comments);
+        expect(ref).toHaveBeenCalledWith("influencer_campaigns/campaign/instagram_comments/post");
+    });
+    it.each([
+        { label: "null", value: null },
+        { label: "a number", value: 7 },
+        { label: "a boolean", value: false },
+        { label: "an object", value: {} },
+        { label: "an array", value: [] },
+    ])("preserves stored comments when text is $label", async ({ value: invalidText }) => {
+        const { app, set } = fakeApp();
+        const request = vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(
+                response({ data: [comment("a")], paging: { next: "next", cursors: { after: "cursor" } } }),
+            )
+            .mockResolvedValueOnce(response({ data: [{ ...commentWithoutText, text: invalidText }] }));
+
+        const result = await syncCampaign(app as never, "campaign", campaign, request);
+
+        expect(result.failed).toBe(1);
+        expect(result.postsProcessed).toBe(0);
+        expect(set).not.toHaveBeenCalled();
+    });
     it("replaces only the per-post array after every page succeeds", async () => {
         const { app, ref, set } = fakeApp();
         const result = await syncCampaign(
